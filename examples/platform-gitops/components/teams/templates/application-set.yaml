@@ -1,0 +1,41 @@
+# ApplicationSet that watches the team's gitops repo for service directories.
+# Each subdirectory under the configured appPath becomes an Argo Application
+# deployed to the team's namespace.
+#
+# The team's services are expected to use a shared Helm chart (as a dependency)
+# with per-service values. The git directory generator discovers each service
+# automatically.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: {{ .Values.team.name }}-services
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  generators:
+    - git:
+        repoURL: {{ .Values.team.repoUrl | quote }}
+        revision: {{ .Values.team.revision | quote }}
+        directories:
+          - path: "{{ .Values.team.appPath }}/*"
+  template:
+    metadata:
+      name: "{{ .Values.team.name }}-{{`{{ .path.basename }}`}}"
+      namespace: argocd
+    spec:
+      project: {{ .Values.team.name }}
+      source:
+        repoURL: {{ .Values.team.repoUrl | quote }}
+        path: "{{`{{ .path.path }}`}}"
+        targetRevision: {{ .Values.team.revision | quote }}
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: {{ .Values.team.name }}
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - ServerSideApply=true

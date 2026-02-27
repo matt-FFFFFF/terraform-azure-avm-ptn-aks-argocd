@@ -1,0 +1,42 @@
+# Federated identity credential for the Argo CD repo-server service account.
+# This binds the managed identity (created in WS1) to the Kubernetes service
+# account created by the Argo CD Helm chart, enabling workload identity
+# federation for Azure DevOps repository access.
+#
+# The subject is derived from the Helm release name and namespace, ensuring
+# that changes to either are automatically reflected in the credential.
+resource "azapi_resource" "argocd_repo_federated_credential" {
+  type      = "Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31"
+  name      = "fc-argocd-repo-server"
+  parent_id = var.argocd_repo_identity_resource_id
+
+  body = {
+    properties = {
+      audiences = ["api://AzureADTokenExchange"]
+      issuer    = var.aks_oidc_issuer_url
+      subject   = local.argocd_repo_server_federated_subject
+    }
+  }
+}
+
+# Federated identity credential for the External Secrets Operator service account.
+# ESO is deployed by Argo CD (sync wave 0), but the FIC must exist before ESO
+# pods can authenticate to Azure Key Vault via workload identity. This module
+# creates it because the service account name is deterministic from the ESO
+# Helm chart conventions.
+#
+# The subject is derived from var.eso_namespace and var.eso_service_account_name,
+# which must match the ESO Application spec in the platform-gitops repo.
+resource "azapi_resource" "eso_federated_credential" {
+  type      = "Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31"
+  name      = "fc-external-secrets"
+  parent_id = var.eso_identity_resource_id
+
+  body = {
+    properties = {
+      audiences = ["api://AzureADTokenExchange"]
+      issuer    = var.aks_oidc_issuer_url
+      subject   = local.eso_federated_subject
+    }
+  }
+}

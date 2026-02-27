@@ -1,0 +1,32 @@
+# Sync Wave 2: TLS Wildcard Certificate
+# Deploys an ExternalSecret that pulls the wildcard TLS certificate from
+# Azure Key Vault into the istio-ingress namespace. The Gateway resource
+# references this secret for TLS termination.
+#
+# This must run after ESO + ClusterSecretStore (wave 0) are healthy.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tls-wildcard
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: <PLATFORM_GITOPS_REPO_URL>
+    path: components/tls-wildcard
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: istio-ingress
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+      - ServerSideApply=true

@@ -1,0 +1,15 @@
+# Umbrella chart for Team A's API service.
+# The team-service dependency provides the standard Deployment, Service,
+# HTTPRoute, and ServiceAccount templates. Teams only supply values.
+apiVersion: v2
+name: team-a-api
+description: Team A API service.
+version: 0.1.0
+type: application
+
+dependencies:
+  - name: team-service
+    version: "0.1.0"
+    # The shared chart is published to ACR by a CI pipeline from the
+    # helm-charts repo. Replace <acr-name> with your registry hostname.
+    repository: "oci://<acr-name>.azurecr.io/helm"

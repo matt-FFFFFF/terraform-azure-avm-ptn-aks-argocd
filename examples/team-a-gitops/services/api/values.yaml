@@ -1,0 +1,47 @@
+# Values for Team A's API service.
+# Keys are nested under "team-service" because that is the dependency alias
+# in Chart.yaml (Helm scopes values under the dependency name).
+
+team-service:
+  image:
+    repository: <acr-name>.azurecr.io/team-a/api
+    tag: "1.0.0"
+
+  replicaCount: 2
+  containerPort: 8080
+
+  env:
+    - name: LOG_LEVEL
+      value: info
+    - name: ASPNETCORE_URLS
+      value: "http://+:8080"
+
+  envFrom:
+    - secretRef:
+        # Populated by an ExternalSecret (team manages their own ESO resources).
+        name: api-secrets
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+  httpRoute:
+    enabled: true
+    hostname: api.example.com
+    rules:
+      - matches:
+          - path:
+              type: PathPrefix
+              value: /
+
+  serviceAccount:
+    create: true
+    annotations:
+      azure.workload.identity/client-id: <TEAM_A_IDENTITY_CLIENT_ID>
+
+  podLabels:
+    azure.workload.identity/use: "true"

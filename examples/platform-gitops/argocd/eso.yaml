@@ -1,0 +1,42 @@
+# Sync Wave 0: External Secrets Operator
+# Deploys ESO from its official Helm chart. The CRDs are installed by default
+# (installCRDs: true), which is required before the ClusterSecretStore can be
+# created in the next Application.
+#
+# The ESO controller-manager pod uses workload identity to authenticate to
+# Azure Key Vault. The client-id and tenant-id are configured via Helm values.
+# The federated identity credential for the ESO service account is created by
+# Terraform (WS2 module or a separate apply).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: external-secrets
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://charts.external-secrets.io
+    chart: external-secrets
+    targetRevision: 0.12.1
+    helm:
+      valuesObject:
+        installCRDs: true
+        serviceAccount:
+          annotations:
+            azure.workload.identity/client-id: <ESO_IDENTITY_CLIENT_ID>
+        podLabels:
+          azure.workload.identity/use: "true"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: external-secrets
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

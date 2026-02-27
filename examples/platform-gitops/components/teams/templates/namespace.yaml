@@ -1,0 +1,10 @@
+# Team namespace with Istio sidecar injection enabled.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.team.name }}
+  labels:
+    istio-injection: enabled
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: platform
+    platform.example.com/team: {{ .Values.team.name }}

@@ -1,0 +1,7 @@
+# Team B configuration.
+name: team-b
+repoUrl: https://dev.azure.com/org/project/_git/team-b-gitops
+identityClientId: <TEAM_B_IDENTITY_CLIENT_ID>
+revision: main
+appPath: services
+sharedChartRepoUrl: https://dev.azure.com/org/project/_git/helm-charts

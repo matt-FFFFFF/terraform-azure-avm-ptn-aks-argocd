@@ -1,0 +1,15 @@
+# Default values — overridden by the ApplicationSet for each team.
+team:
+  # The team name, used as namespace and AppProject name.
+  name: ""
+  # The Azure DevOps repo URL for this team's gitops repo.
+  repoUrl: ""
+  # The managed identity client ID for this team's workload identity.
+  identityClientId: ""
+  # The target revision (branch) for the team's gitops repo.
+  revision: main
+  # The base path within the team's gitops repo to scan for services.
+  # Each subdirectory under this path becomes an Argo Application.
+  appPath: services
+  # The shared Helm chart repo URL for team services.
+  sharedChartRepoUrl: ""

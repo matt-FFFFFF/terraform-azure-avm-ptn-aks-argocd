@@ -1,0 +1,138 @@
+# GitHub Actions workflow for publishing Helm charts to ACR.
+#
+# Prerequisites:
+#   1. A federated identity credential on the app registration / managed
+#      identity that trusts this repo's GitHub OIDC issuer. The subject
+#      filter should be:
+#        repo:<org>/<repo>:ref:refs/heads/main
+#   2. The identity must have AcrPush role on the target ACR.
+#   3. Repository variables (Settings → Secrets and variables → Actions):
+#        AZURE_CLIENT_ID      – App registration / managed identity client ID
+#        AZURE_TENANT_ID      – Azure AD tenant ID
+#        AZURE_SUBSCRIPTION_ID – Subscription containing the ACR
+#        ACR_NAME             – ACR login server (e.g. myregistry.azurecr.io)
+
+name: Publish Helm Charts
+
+on:
+  push:
+    branches: [main]
+    paths: ["charts/**"]
+  pull_request:
+    branches: [main]
+    paths: ["charts/**"]
+
+permissions:
+  id-token: write   # Required for OIDC token exchange
+  contents: read
+
+env:
+  OCI_PREFIX: "oci://${{ vars.ACR_NAME }}/helm"
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Job 1: Lint all charts (PRs and pushes)
+  # ──────────────────────────────────────────────
+  lint:
+    name: Lint Helm Charts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Lint all charts
+        run: |
+          failed=0
+          for chart_dir in charts/*/; do
+            if [ -f "${chart_dir}Chart.yaml" ]; then
+              echo "::group::Linting ${chart_dir}"
+              if ! helm lint "${chart_dir}"; then
+                failed=1
+              fi
+              echo "::endgroup::"
+            fi
+          done
+          exit $failed
+
+  # ──────────────────────────────────────────────
+  # Job 2: Package and push changed charts (main only)
+  # ──────────────────────────────────────────────
+  publish:
+    name: Publish Helm Charts
+    needs: lint
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Detect changed charts
+        id: changes
+        run: |
+          MERGE_BASE=$(git rev-parse HEAD~1)
+          echo "Comparing against: ${MERGE_BASE}"
+
+          changed=""
+          for chart_dir in charts/*/; do
+            if [ -f "${chart_dir}Chart.yaml" ]; then
+              chart_name=$(basename "${chart_dir}")
+              if git diff --name-only "${MERGE_BASE}" HEAD -- "${chart_dir}" | grep -q .; then
+                changed="${changed} ${chart_name}"
+                echo "Changed: ${chart_name}"
+              else
+                echo "Unchanged: ${chart_name}"
+              fi
+            fi
+          done
+
+          changed=$(echo "${changed}" | xargs)
+          echo "charts=${changed}" >> "$GITHUB_OUTPUT"
+
+          if [ -z "${changed}" ]; then
+            echo "No charts changed — nothing to publish."
+          fi
+
+      # Authenticate to Azure using GitHub OIDC → Azure AD
+      # workload identity federation (no secrets stored).
+      - name: Azure Login
+        if: steps.changes.outputs.charts != ''
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Push changed charts to ACR
+        if: steps.changes.outputs.charts != ''
+        run: |
+          set -euo pipefail
+
+          # Exchange the Azure CLI token for an ACR access token.
+          ACCESS_TOKEN=$(az acr login --name "${{ vars.ACR_NAME }}" --expose-token --query accessToken -o tsv)
+          echo "${ACCESS_TOKEN}" | helm registry login "${{ vars.ACR_NAME }}" --username 00000000-0000-0000-0000-000000000000 --password-stdin
+
+          for chart_name in ${{ steps.changes.outputs.charts }}; do
+            chart_dir="charts/${chart_name}"
+            echo "::group::Publishing ${chart_name}"
+
+            version=$(grep '^version:' "${chart_dir}/Chart.yaml" | awk '{print $2}')
+            echo "Chart: ${chart_name}, Version: ${version}"
+
+            # Check if this version already exists in ACR.
+            if helm show chart "${OCI_PREFIX}/${chart_name}" --version "${version}" >/dev/null 2>&1; then
+              echo "::warning::Version ${version} of ${chart_name} already exists in ACR — skipping."
+              echo "Bump the version in ${chart_dir}/Chart.yaml to publish a new version."
+            else
+              helm package "${chart_dir}" --destination .build/
+              helm push ".build/${chart_name}-${version}.tgz" "${OCI_PREFIX}"
+              echo "Pushed ${chart_name}:${version} to ${OCI_PREFIX}"
+            fi
+
+            echo "::endgroup::"
+          done

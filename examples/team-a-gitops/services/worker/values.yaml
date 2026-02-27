@@ -1,0 +1,53 @@
+# Values for Team A's background worker service.
+# This service does not expose an HTTPRoute (it is not internet-facing).
+
+team-service:
+  image:
+    repository: <acr-name>.azurecr.io/team-a/worker
+    tag: "1.0.0"
+
+  replicaCount: 1
+  containerPort: 8080
+
+  env:
+    - name: LOG_LEVEL
+      value: info
+
+  envFrom:
+    - secretRef:
+        name: worker-secrets
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
+
+  # No HTTPRoute — this service is not exposed via the gateway.
+  httpRoute:
+    enabled: false
+
+  # Workers often need longer startup times.
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 15
+
+  readinessProbe:
+    httpGet:
+      path: /readyz
+      port: http
+    initialDelaySeconds: 15
+    periodSeconds: 10
+
+  serviceAccount:
+    create: true
+    annotations:
+      azure.workload.identity/client-id: <TEAM_A_IDENTITY_CLIENT_ID>
+
+  podLabels:
+    azure.workload.identity/use: "true"

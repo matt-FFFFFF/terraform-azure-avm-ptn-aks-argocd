@@ -1,0 +1,11 @@
+# Umbrella chart for Team A's background worker service.
+apiVersion: v2
+name: team-a-worker
+description: Team A background worker service.
+version: 0.1.0
+type: application
+
+dependencies:
+  - name: team-service
+    version: "0.1.0"
+    repository: "oci://<acr-name>.azurecr.io/helm"

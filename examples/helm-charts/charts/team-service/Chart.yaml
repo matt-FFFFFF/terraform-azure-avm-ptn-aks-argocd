@@ -1,0 +1,9 @@
+apiVersion: v2
+name: team-service
+description: >-
+  Shared Helm chart for team services on the AKS platform.
+  Provides a standard Deployment, Service, HTTPRoute, and
+  ServiceAccount with workload identity support. Teams use
+  this chart as a dependency in their per-service charts.
+version: 0.1.0
+type: application

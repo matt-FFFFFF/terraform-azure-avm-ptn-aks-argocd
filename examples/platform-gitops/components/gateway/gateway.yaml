@@ -1,0 +1,37 @@
+# Gateway API Gateway resource for ingress TLS termination.
+# This creates the actual Gateway that Istio's gateway controller
+# provisions. The TLS certificate is sourced from the wildcard-tls
+# secret created by the ExternalSecret.
+#
+# Team HTTPRoutes attach to this Gateway via parentRefs.
+# Replace <DOMAIN> with your actual domain (e.g. example.com).
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: platform-gateway
+  namespace: istio-ingress
+  annotations:
+    # Ensure the gateway controller is Istio
+    networking.istio.io/service-type: LoadBalancer
+spec:
+  gatewayClassName: istio
+  listeners:
+    - name: https
+      port: 443
+      protocol: HTTPS
+      hostname: "*.<DOMAIN>"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: wildcard-tls
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: http
+      port: 80
+      protocol: HTTP
+      hostname: "*.<DOMAIN>"
+      allowedRoutes:
+        namespaces:
+          from: All

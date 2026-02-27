@@ -1,0 +1,5 @@
+apiVersion: v2
+name: team-resources
+description: Platform resources provisioned per team (namespace, AppProject, ApplicationSet)
+version: 0.1.0
+type: application

@@ -1,0 +1,28 @@
+# AppProject scopes the team to their own namespace and repo.
+# Teams can only deploy to their own namespace and can only
+# source from their own Git repo and the shared chart repo.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: {{ .Values.team.name }}
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: "Project for team {{ .Values.team.name }}"
+  sourceRepos:
+    - {{ .Values.team.repoUrl | quote }}
+    {{- if .Values.team.sharedChartRepoUrl }}
+    - {{ .Values.team.sharedChartRepoUrl | quote }}
+    {{- end }}
+  destinations:
+    - namespace: {{ .Values.team.name }}
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist: []
+  namespaceResourceBlacklist:
+    - group: ""
+      kind: ResourceQuota
+    - group: ""
+      kind: LimitRange
+    - group: networking.k8s.io
+      kind: NetworkPolicy

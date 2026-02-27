@@ -1,0 +1,94 @@
+# Default values for team-service.
+# Teams override these in their per-service values.yaml.
+
+nameOverride: ""
+fullnameOverride: ""
+
+# -- Container image configuration.
+image:
+  repository: ""
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# -- Number of replicas.
+replicaCount: 1
+
+# -- Container port the application listens on.
+containerPort: 8080
+
+# -- Resource requests and limits.
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# -- Environment variables as a list of name/value pairs.
+env: []
+  # - name: LOG_LEVEL
+  #   value: info
+
+# -- Environment variables from ConfigMap or Secret references.
+envFrom: []
+  # - secretRef:
+  #     name: my-secret
+
+# -- Liveness probe configuration. Set to empty map to disable.
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+# -- Readiness probe configuration. Set to empty map to disable.
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+
+# -- Kubernetes Service configuration.
+service:
+  type: ClusterIP
+  port: 80
+
+# -- HTTPRoute configuration for Gateway API ingress.
+httpRoute:
+  enabled: false
+  # -- The hostname for this service (e.g. api.example.com).
+  hostname: ""
+  # -- Gateway reference. Must match the platform Gateway.
+  gateway:
+    name: platform-gateway
+    namespace: istio-ingress
+  # -- Path match rules. Defaults to prefix match on /.
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+
+# -- ServiceAccount configuration.
+serviceAccount:
+  # -- Whether to create a ServiceAccount for this service.
+  create: false
+  # -- Annotations to add (e.g. workload identity client-id).
+  annotations: {}
+  # -- Override the ServiceAccount name.
+  name: ""
+
+# -- Pod-level labels (e.g. for workload identity).
+podLabels: {}
+
+# -- Pod-level annotations.
+podAnnotations: {}
+
+# -- Additional volumes to mount.
+volumes: []
+
+# -- Additional volume mounts.
+volumeMounts: []

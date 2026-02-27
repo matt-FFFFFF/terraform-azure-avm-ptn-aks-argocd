@@ -1,0 +1,10 @@
+# Team A configuration.
+# Each file under config/teams/ is discovered by the teams ApplicationSet
+# (argocd/teams.yaml) via the git file generator. Adding a new file here
+# automatically onboards a new team.
+name: team-a
+repoUrl: https://dev.azure.com/org/project/_git/team-a-gitops
+identityClientId: <TEAM_A_IDENTITY_CLIENT_ID>
+revision: main
+appPath: services
+sharedChartRepoUrl: https://dev.azure.com/org/project/_git/helm-charts

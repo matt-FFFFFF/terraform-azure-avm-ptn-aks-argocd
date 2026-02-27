@@ -1,0 +1,155 @@
+# Azure DevOps pipeline for publishing Helm charts to ACR.
+#
+# Prerequisites:
+#   1. An Azure DevOps service connection configured with workload identity
+#      federation (not a secret-based SP). The service connection's managed
+#      identity or app registration must have AcrPush on the target ACR.
+#   2. Pipeline variable `ACR_NAME` set to the ACR login server hostname
+#      (e.g. myregistry.azurecr.io).
+#   3. Pipeline variable `SERVICE_CONNECTION` set to the name of the Azure
+#      service connection.
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - charts/**
+
+pr:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - charts/**
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  # Override these via pipeline variables or variable groups.
+  - name: ACR_NAME
+    value: ""
+  - name: SERVICE_CONNECTION
+    value: ""
+  - name: OCI_PREFIX
+    value: "oci://$(ACR_NAME)/helm"
+
+stages:
+  # ──────────────────────────────────────────────
+  # Stage 1: Lint all charts (runs on PRs and pushes)
+  # ──────────────────────────────────────────────
+  - stage: Lint
+    displayName: Lint Helm Charts
+    jobs:
+      - job: lint
+        displayName: helm lint
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          - task: HelmInstaller@1
+            displayName: Install Helm
+            inputs:
+              helmVersionToInstall: latest
+
+          - script: |
+              set -euo pipefail
+              failed=0
+              for chart_dir in charts/*/; do
+                if [ -f "${chart_dir}Chart.yaml" ]; then
+                  echo "##[group]Linting ${chart_dir}"
+                  if ! helm lint "${chart_dir}"; then
+                    failed=1
+                  fi
+                  echo "##[endgroup]"
+                fi
+              done
+              exit $failed
+            displayName: Lint all charts
+
+  # ──────────────────────────────────────────────
+  # Stage 2: Package and push changed charts (main only)
+  # ──────────────────────────────────────────────
+  - stage: Publish
+    displayName: Publish Helm Charts
+    dependsOn: Lint
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - job: publish
+        displayName: Package and push to ACR
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          - task: HelmInstaller@1
+            displayName: Install Helm
+            inputs:
+              helmVersionToInstall: latest
+
+          # Detect which charts changed since the last commit on main.
+          - script: |
+              set -euo pipefail
+              MERGE_BASE=$(git log --first-parent --merges -1 --format='%H' HEAD~1 2>/dev/null || git rev-parse HEAD~1)
+              echo "Comparing against: ${MERGE_BASE}"
+
+              changed_charts=""
+              for chart_dir in charts/*/; do
+                if [ -f "${chart_dir}Chart.yaml" ]; then
+                  chart_name=$(basename "${chart_dir}")
+                  if git diff --name-only "${MERGE_BASE}" HEAD -- "${chart_dir}" | grep -q .; then
+                    changed_charts="${changed_charts} ${chart_name}"
+                    echo "Changed: ${chart_name}"
+                  else
+                    echo "Unchanged: ${chart_name}"
+                  fi
+                fi
+              done
+
+              if [ -z "${changed_charts}" ]; then
+                echo "No charts changed — nothing to publish."
+                echo "##vso[task.setvariable variable=CHANGED_CHARTS]"
+              else
+                echo "##vso[task.setvariable variable=CHANGED_CHARTS]${changed_charts}"
+              fi
+            displayName: Detect changed charts
+
+          # Authenticate to Azure using workload identity federation
+          # and log in to ACR with the federated token.
+          - task: AzureCLI@2
+            displayName: Package and push changed charts
+            condition: and(succeeded(), ne(variables['CHANGED_CHARTS'], ''))
+            inputs:
+              azureSubscription: $(SERVICE_CONNECTION)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+
+                # The AzureCLI task has already exchanged the federated
+                # token and set up `az` with a valid access token.
+                # Use the token to log in to ACR.
+                ACCESS_TOKEN=$(az acr login --name "$(ACR_NAME)" --expose-token --query accessToken -o tsv)
+                echo "${ACCESS_TOKEN}" | helm registry login "$(ACR_NAME)" --username 00000000-0000-0000-0000-000000000000 --password-stdin
+
+                for chart_name in $(CHANGED_CHARTS); do
+                  chart_dir="charts/${chart_name}"
+                  echo "##[group]Publishing ${chart_name}"
+
+                  version=$(grep '^version:' "${chart_dir}/Chart.yaml" | awk '{print $2}')
+                  echo "Chart: ${chart_name}, Version: ${version}"
+
+                  # Check if this version already exists in ACR.
+                  if helm show chart "$(OCI_PREFIX)/${chart_name}" --version "${version}" >/dev/null 2>&1; then
+                    echo "##[warning]Version ${version} of ${chart_name} already exists in ACR — skipping."
+                    echo "Bump the version in ${chart_dir}/Chart.yaml to publish a new version."
+                  else
+                    helm package "${chart_dir}" --destination .build/
+                    helm push ".build/${chart_name}-${version}.tgz" "$(OCI_PREFIX)"
+                    echo "Pushed ${chart_name}:${version} to $(OCI_PREFIX)"
+                  fi
+
+                  echo "##[endgroup]"
+                done

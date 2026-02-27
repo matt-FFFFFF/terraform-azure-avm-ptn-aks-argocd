@@ -1,0 +1,62 @@
+# Sync Wave 3: Argo CD Self-Management
+# This Application causes Argo CD to manage its own Helm release.
+# After the initial Terraform bootstrap, this Application "adopts"
+# the existing Argo CD installation so that all further configuration
+# changes are made via Git rather than Terraform.
+#
+# The Helm values here should match (and eventually supersede) what
+# Terraform deployed during bootstrap. The Terraform module has
+# lifecycle { ignore_changes } on the Helm release values so that
+# this Application can take over.
+#
+# IMPORTANT: The values below must include the workload identity
+# configuration (service account annotations, pod labels, GIT_ASKPASS
+# volume mounts) to preserve Git authentication after Argo adopts
+# the release.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd-self-manage
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://argoproj.github.io/argo-helm
+    chart: argo-cd
+    targetRevision: 7.8.8
+    helm:
+      valuesObject:
+        repoServer:
+          serviceAccount:
+            annotations:
+              azure.workload.identity/client-id: <ARGOCD_REPO_IDENTITY_CLIENT_ID>
+          podLabels:
+            azure.workload.identity/use: "true"
+          env:
+            - name: GIT_ASKPASS
+              value: /usr/local/bin/git-askpass.sh
+          volumes:
+            - name: git-askpass
+              configMap:
+                name: argocd-git-askpass
+                defaultMode: 0755
+          volumeMounts:
+            - name: git-askpass
+              mountPath: /usr/local/bin/git-askpass.sh
+              subPath: git-askpass.sh
+        server:
+          service:
+            type: ClusterIP
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
