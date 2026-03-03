@@ -12,7 +12,10 @@
 # IMPORTANT: The values below must include the workload identity
 # configuration (service account annotations, pod labels, GIT_ASKPASS
 # volume mounts) to preserve Git authentication after Argo adopts
-# the release.
+# the release. When using GitHub App auth (git_provider = "github"),
+# the repoServer workload identity and GIT_ASKPASS sections below
+# should be removed — ArgoCD handles GitHub App auth natively via
+# the repo-creds secret.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

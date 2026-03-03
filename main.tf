@@ -45,6 +45,8 @@ resource "kubernetes_secret" "platform_identity" {
 }
 
 resource "kubernetes_secret" "argocd_repo_creds" {
+  count = var.git_provider == "azuredevops" ? 1 : 0
+
   metadata {
     name      = "argocd-repo-creds-azuredevops"
     namespace = kubernetes_namespace.argocd.metadata[0].name

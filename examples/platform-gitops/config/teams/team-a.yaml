@@ -4,7 +4,9 @@
 # automatically onboards a new team.
 name: team-a
 repoUrl: https://dev.azure.com/org/project/_git/team-a-gitops
+# GitHub alternative: https://github.com/org/team-a-gitops
 identityClientId: <TEAM_A_IDENTITY_CLIENT_ID>
 revision: main
 appPath: services
 sharedChartRepoUrl: https://dev.azure.com/org/project/_git/helm-charts
+# GitHub alternative: https://github.com/org/helm-charts

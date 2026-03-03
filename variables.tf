@@ -105,37 +105,79 @@ DESCRIPTION
 
 variable "argocd_repo_identity_client_id" {
   type        = string
-  nullable    = false
+  default     = null
+  nullable    = true
   description = <<DESCRIPTION
 The client ID of the managed identity used by the Argo CD repo-server to
 authenticate to Azure DevOps via workload identity federation. This module
 creates the federated identity credential binding this identity to the
 Argo CD repo-server service account. The identity must have read access
 to the Azure DevOps repositories.
+
+Required when git_provider = "azuredevops".
 DESCRIPTION
 
   validation {
-    condition     = can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", var.argocd_repo_identity_client_id))
+    condition     = var.argocd_repo_identity_client_id == null || can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", var.argocd_repo_identity_client_id))
     error_message = "The argocd_repo_identity_client_id must be a valid UUID."
   }
 }
 
 variable "argocd_repo_identity_resource_id" {
   type        = string
-  nullable    = false
+  default     = null
+  nullable    = true
   description = <<DESCRIPTION
 The Azure resource ID of the managed identity used by the Argo CD repo-server.
 This is the parent resource for the federated identity credential that this
 module creates. The federated credential binds this identity to the Argo CD
 repo-server Kubernetes service account.
 
+Required when git_provider = "azuredevops".
+
 Example: `/subscriptions/.../resourceGroups/.../providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-argocd-repo`
 DESCRIPTION
 
   validation {
-    condition     = can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\\.ManagedIdentity/userAssignedIdentities/[^/]+$", var.argocd_repo_identity_resource_id))
+    condition     = var.argocd_repo_identity_resource_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\\.ManagedIdentity/userAssignedIdentities/[^/]+$", var.argocd_repo_identity_resource_id))
     error_message = "The argocd_repo_identity_resource_id must be a valid Azure resource ID for a user-assigned managed identity."
   }
+}
+
+variable "git_provider" {
+  type        = string
+  default     = "azuredevops"
+  nullable    = false
+  description = "The Git hosting provider. Determines the authentication strategy for ArgoCD repository access."
+
+  validation {
+    condition     = contains(["azuredevops", "github"], var.git_provider)
+    error_message = "git_provider must be \"azuredevops\" or \"github\"."
+  }
+}
+
+variable "github_app_id" {
+  type        = string
+  default     = null
+  description = "The GitHub App ID for ArgoCD repository access. Required when git_provider = \"github\"."
+}
+
+variable "github_app_installation_id" {
+  type        = string
+  default     = null
+  description = "The GitHub App installation ID. Required when git_provider = \"github\"."
+}
+
+variable "github_app_private_key_secret_name" {
+  type        = string
+  default     = null
+  description = <<DESCRIPTION
+The name of the secret in var.platform_keyvault_id containing the GitHub App
+PEM-encoded private key. Read at apply time via an ephemeral resource — the
+value never appears in Terraform state or plan files.
+
+Required when git_provider = "github".
+DESCRIPTION
 }
 
 variable "aks_oidc_issuer_url" {

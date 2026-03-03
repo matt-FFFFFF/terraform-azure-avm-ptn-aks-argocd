@@ -24,11 +24,7 @@ DESCRIPTION
 
 output "repo_creds_url" {
   value       = local.repo_creds_url
-  description = <<DESCRIPTION
-The base URL used for the Argo CD repository credential template. All Git
-repositories whose URL starts with this prefix will use workload identity
-authentication via GIT_ASKPASS.
-DESCRIPTION
+  description = "The base URL used for the ArgoCD repository credential template."
 }
 
 output "helm_release_name" {
@@ -50,8 +46,8 @@ DESCRIPTION
 }
 
 output "argocd_repo_federated_credential_id" {
-  value       = azapi_resource.argocd_repo_federated_credential.id
-  description = "The Azure resource ID of the federated identity credential for the Argo CD repo-server."
+  value       = var.git_provider == "azuredevops" ? azapi_resource.argocd_repo_federated_credential[0].id : null
+  description = "The Azure resource ID of the federated identity credential for the Argo CD repo-server. Null when git_provider = \"github\"."
 }
 
 output "eso_federated_credential_id" {
@@ -66,4 +62,9 @@ The name of the Kubernetes service account that the ESO federated identity
 credential is bound to. The ESO Helm chart must create a service account
 with this exact name for workload identity to function.
 DESCRIPTION
+}
+
+output "git_provider" {
+  value       = var.git_provider
+  description = "The Git hosting provider selected for this deployment."
 }

@@ -72,6 +72,7 @@ that Argo CD will sync to self-manage its own configuration and deploy
 platform components (ESO, Gateway, namespaces, AppProjects, etc.).
 
 Example: `https://dev.azure.com/org/project/_git/platform-gitops`
+Example: `https://github.com/org/platform-gitops`
 DESCRIPTION
 
   validation {
@@ -106,13 +107,12 @@ variable "argocd_repo_creds_url" {
   default     = null
   description = <<DESCRIPTION
 The base URL for the Argo CD repository credential template. All Git repos
-whose URL starts with this prefix will use the workload identity authentication
-configured by this module (via GIT_ASKPASS).
+whose URL starts with this prefix will use the authentication method configured
+by this module.
 
-If not set, defaults to the Azure DevOps organization-level URL derived from
-`var.platform_gitops_repo_url`. For example, if the platform repo URL is
-`https://dev.azure.com/org/project/_git/platform-gitops`, the default base
-URL will be `https://dev.azure.com/org/`.
+If not set, the default is derived from `var.platform_gitops_repo_url`:
+- Azure DevOps: the organization-level URL, e.g. `https://dev.azure.com/org/`
+- GitHub: the organization-level URL, e.g. `https://github.com/org/`
 
 Set this to a more specific URL to restrict which repos use these credentials,
 or to a broader URL if your repos span multiple organizations.

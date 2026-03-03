@@ -1,4 +1,6 @@
 resource "kubernetes_config_map" "git_askpass" {
+  count = var.git_provider == "azuredevops" ? 1 : 0
+
   metadata {
     name      = "argocd-git-askpass"
     namespace = kubernetes_namespace.argocd.metadata[0].name
@@ -36,11 +38,12 @@ resource "helm_release" "argocd" {
     var.argocd_additional_helm_values
   )
 
-  # Wait for the ConfigMap and federated credential to exist before installing
-  # Argo CD, so the repo-server pod can authenticate immediately on startup.
+  # Wait for the ConfigMap, repo-creds, and federated credential to exist before
+  # installing Argo CD, so the repo-server pod can authenticate immediately on startup.
   depends_on = [
     kubernetes_config_map.git_askpass,
     kubernetes_secret.argocd_repo_creds,
+    kubernetes_secret_v1.argocd_repo_creds_github,
     azapi_resource.argocd_repo_federated_credential,
   ]
 

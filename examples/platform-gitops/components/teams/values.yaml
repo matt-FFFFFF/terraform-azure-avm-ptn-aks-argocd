@@ -2,7 +2,9 @@
 team:
   # The team name, used as namespace and AppProject name.
   name: ""
-  # The Azure DevOps repo URL for this team's gitops repo.
+  # The Git repo URL for this team's gitops repo.
+  # Azure DevOps: https://dev.azure.com/org/project/_git/team-gitops
+  # GitHub:       https://github.com/org/team-gitops
   repoUrl: ""
   # The managed identity client ID for this team's workload identity.
   identityClientId: ""

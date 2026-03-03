@@ -2,8 +2,10 @@
 # terraform-azure-avm-ptn-aks-argocd
 
 This module bootstraps Argo CD on an existing AKS cluster and configures it to
-self-manage from a platform-gitops repository in Azure DevOps, using workload
-identity federation for authentication (no static secrets).
+self-manage from a platform-gitops repository, using either **Azure DevOps** or
+**GitHub** for Git hosting. Authentication is handled via workload identity
+federation (Azure DevOps) or native GitHub App auth (GitHub) — no static secrets
+in either case.
 
 ## Purpose
 
@@ -21,12 +23,12 @@ AKS deployment pattern:
 
 | Resource | Purpose |
 |---|---|
-| `azapi_resource` (federated credential) | Binds the Argo CD repo-server managed identity to its Kubernetes service account |
+| `azapi_resource` (federated credential) | Binds the Argo CD repo-server managed identity to its Kubernetes service account (ADO only) |
 | `kubernetes_namespace` | The Argo CD namespace |
 | `kubernetes_secret` (platform-identity) | Bridges WS1 identity values (ESO client ID, Key Vault name, tenant ID) into Kubernetes |
-| `kubernetes_secret` (repo-creds) | Azure DevOps credential template - enables workload identity auth for all repos under the org |
-| `kubernetes_config_map` (git-askpass) | Shell script that acquires Azure AD tokens via workload identity federation |
-| `helm_release` (argo-cd) | Argo CD installation with workload identity config and self-manage Application |
+| `kubernetes_secret` (repo-creds) | Azure DevOps credential template (ADO) or GitHub App credential template (GitHub) |
+| `kubernetes_config_map` (git-askpass) | Shell script that acquires Azure AD tokens via workload identity federation (ADO only) |
+| `helm_release` (argo-cd) | Argo CD installation with auth config and self-manage Application |
 
 ## What Argo CD Manages After Bootstrap
 
@@ -44,19 +46,29 @@ over management of:
 ```
 Terraform WS1 (Infrastructure)
 ├── AKS cluster (OIDC issuer enabled)
-├── Managed identity: argocd-repo (read access to Azure DevOps)
+├── Managed identity: argocd-repo (read access to Azure DevOps) [ADO only]
 ├── Managed identity: eso (Key Vault access)
-├── Azure Key Vault
+├── Azure Key Vault (+ GitHub App private key for GitHub provider)
 └── Outputs: identity resource IDs, client IDs, tenant ID, KV name, OIDC issuer URL
         │
         ▼
 Terraform WS2 (This Module)
-├── Creates: federated identity credential (argocd-repo identity → K8s SA)
-├── Creates: argocd namespace
-├── Creates: platform-identity K8s secret (ESO client ID, KV name, tenant ID)
-├── Creates: repo-creds K8s secret (Azure DevOps credential template)
-├── Creates: git-askpass ConfigMap (workload identity token script)
-├── Creates: Argo CD Helm release + platform-root Application
+├── var.git_provider selects authentication strategy
+│
+├── [ADO path]
+│   ├── Creates: federated identity credential (argocd-repo identity → K8s SA)
+│   ├── Creates: repo-creds K8s secret (Azure DevOps credential template)
+│   └── Creates: git-askpass ConfigMap (workload identity token script)
+│
+├── [GitHub path]
+│   ├── Reads: GitHub App private key from Key Vault (ephemeral — never in state)
+│   └── Creates: repo-creds K8s secret (GitHub App auth, private key via data_wo)
+│
+├── [Both paths]
+│   ├── Creates: argocd namespace
+│   ├── Creates: platform-identity K8s secret (ESO client ID, KV name, tenant ID)
+│   ├── Creates: Argo CD Helm release + platform-root Application
+│   └── Creates: ESO federated identity credential
 └── Hands off to Argo CD
         │
         ▼
@@ -67,10 +79,11 @@ Argo CD (Self-Managing from platform-gitops repo)
 └── Sync wave 3: Team ApplicationSets → team repos
 ```
 
-## Azure DevOps Authentication
+## Azure DevOps Authentication (default)
 
-This module configures Argo CD to authenticate to Azure DevOps using workload
-identity federation via a `GIT_ASKPASS` script. The flow:
+When `git_provider = "azuredevops"` (the default), this module configures Argo CD
+to authenticate to Azure DevOps using workload identity federation via a
+`GIT_ASKPASS` script. The flow:
 
 1. This module creates a federated identity credential that binds the managed
    identity to the Argo CD repo-server Kubernetes service account.
@@ -85,13 +98,69 @@ A credential template (`repo-creds`) is created so that **all repositories**
 under the Azure DevOps organization use this authentication method. No per-repo
 secrets are needed.
 
+## GitHub Authentication
+
+Set `git_provider = "github"` to use ArgoCD's native GitHub App authentication.
+The flow:
+
+1. You create a GitHub App, install it on your organization, and store the
+   PEM-encoded private key in the platform Azure Key Vault.
+2. This module reads the private key at apply time via an **ephemeral resource**
+   (`ephemeral "azurerm_key_vault_secret"`). The value is never written to
+   Terraform state or plan files.
+3. The private key is written to a Kubernetes secret using the `data_wo`
+   (write-only) attribute on `kubernetes_secret_v1`, ensuring it also never
+   appears in Terraform state.
+4. ArgoCD uses the GitHub App ID, Installation ID, and private key to obtain
+   installation tokens for Git operations.
+
+A credential template (`repo-creds`) is created so that **all repositories**
+accessible to the GitHub App installation use this authentication method. No
+per-repo secrets are needed.
+
+### GitHub Prerequisites
+
+| Prerequisite | Details |
+|---|---|
+| **GitHub App** | Create a GitHub App with read-only access to repository contents. |
+| **App Installation** | Install the app on the target GitHub organization (or specific repos). |
+| **Private Key in Key Vault** | Store the PEM-encoded private key as a secret in the platform Key Vault (`var.platform_keyvault_id`). |
+
+### GitHub Usage
+
+```hcl
+module "aks_argocd_bootstrap" {
+  source = "Azure/avm-ptn-aks-argocd/azurerm"
+
+  git_provider                       = "github"
+  github_app_id                      = "123456"
+  github_app_installation_id         = "78901234"
+  github_app_private_key_secret_name = "github-app-private-key"
+
+  tenant_id            = var.tenant_id
+  platform_keyvault_id = var.platform_keyvault_id
+  aks_oidc_issuer_url  = var.aks_oidc_issuer_url
+
+  eso_identity_client_id   = var.eso_identity_client_id
+  eso_identity_resource_id = var.eso_identity_resource_id
+
+  platform_gitops_repo_url      = "https://github.com/org/platform-gitops"
+  platform_gitops_repo_path     = "argocd"
+  platform_gitops_repo_revision = "main"
+}
+```
+
+> **Note:** When using `git_provider = "github"`, the `argocd_repo_identity_client_id`
+> and `argocd_repo_identity_resource_id` variables are not required (they default
+> to `null`). The `azurerm` provider must be configured in your root module.
+
 ## Prerequisites
 
 ### Tools
 
 | Tool | Version | Purpose |
 |---|---|---|
-| [Terraform](https://developer.hashicorp.com/terraform/install) | `>= 1.9, < 2.0` | Infrastructure as Code runtime |
+| [Terraform](https://developer.hashicorp.com/terraform/install) | `>= 1.10, < 2.0` | Infrastructure as Code runtime |
 | [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) | Latest | Authentication to Azure for the `azapi` provider |
 | [kubectl](https://kubernetes.io/docs/tasks/tools/) | Latest | Optional: port-forwarding to Argo CD server, cluster debugging |
 
@@ -103,8 +172,9 @@ The following providers must be configured in your root module. See the
 | Provider | Source | Version Constraint | Purpose |
 |---|---|---|---|
 | `azapi` | `Azure/azapi` | `~> 2.4` | Creates federated identity credentials on managed identities |
+| `azurerm` | `hashicorp/azurerm` | `~> 4.0` | Reads GitHub App private key from Key Vault (GitHub provider only) |
 | `helm` | `hashicorp/helm` | `~> 2.17` | Installs the Argo CD Helm chart |
-| `kubernetes` | `hashicorp/kubernetes` | `~> 2.35` | Creates namespaces, secrets, and ConfigMaps on the AKS cluster |
+| `kubernetes` | `hashicorp/kubernetes` | `~> 2.36` | Creates namespaces, secrets, and ConfigMaps on the AKS cluster |
 
 The `modtm` and `random` providers are used internally for AVM telemetry and do
 not require explicit configuration.
@@ -118,9 +188,9 @@ core infrastructure:
 | Resource | Requirements |
 |---|---|
 | **AKS cluster** | OIDC issuer enabled (`oidc_issuer_enabled = true`), workload identity webhook installed (`workload_identity_enabled = true`) |
-| **Managed identity: Argo CD repo-server** | Must have **read access** to Azure DevOps Git repositories. Do **not** create the federated credential in WS1 -- this module creates it. |
+| **Managed identity: Argo CD repo-server** | Must have **read access** to Azure DevOps Git repositories. Do **not** create the federated credential in WS1 -- this module creates it. Only required when `git_provider = "azuredevops"`. |
 | **Managed identity: ESO** | Must have **Secret Get** and **Certificate Get** permissions on the platform Key Vault. This module creates the federated credential binding. |
-| **Azure Key Vault** | Stores platform-level secrets (e.g. wildcard TLS certificate). Team workloads use their own Key Vaults. |
+| **Azure Key Vault** | Stores platform-level secrets (e.g. wildcard TLS certificate). When `git_provider = "github"`, must also contain the GitHub App PEM-encoded private key as a secret. Team workloads use their own Key Vaults. |
 
 ### Azure Permissions
 
@@ -130,8 +200,10 @@ The identity running Terraform must have:
   identities (`Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials/write`)
 - **Kubernetes cluster access** via client certificate, `az aks get-credentials`,
   or another supported authentication method for the `helm` and `kubernetes` providers
+- *(GitHub only)* **Secret Get** permission on the platform Key Vault, so the
+  `azurerm` provider can read the GitHub App private key via the ephemeral resource
 
-### Azure DevOps
+### Azure DevOps (when `git_provider = "azuredevops"`)
 
 - A **platform-gitops repository** that contains Argo CD Application manifests,
   platform component definitions, and team configuration. See
@@ -141,19 +213,33 @@ The identity running Terraform must have:
   Git repositories it needs to sync (at the Azure DevOps organization or project
   level).
 
+### GitHub (when `git_provider = "github"`)
+
+- A **GitHub App** with read-only access to repository contents, created in the
+  target GitHub organization.
+- The app must be **installed** on the organization (or on specific repositories
+  that Argo CD needs to sync).
+- The app's PEM-encoded **private key** must be stored as a secret in the
+  platform Key Vault (`var.platform_keyvault_id`).
+- A **platform-gitops repository** on GitHub with the same structure as described
+  above for Azure DevOps.
+
 ### Workspace 1 Outputs
 
 This module consumes the following outputs from your infrastructure workspace:
 
-| Output | Maps to Variable |
-|---|---|
-| Tenant ID | `tenant_id` |
-| Platform Key Vault resource ID | `platform_keyvault_id` |
-| ESO managed identity client ID | `eso_identity_client_id` |
-| ESO managed identity resource ID | `eso_identity_resource_id` |
-| Argo CD repo-server managed identity client ID | `argocd_repo_identity_client_id` |
-| Argo CD repo-server managed identity resource ID | `argocd_repo_identity_resource_id` |
-| AKS OIDC issuer URL | `aks_oidc_issuer_url` |
+| Output | Maps to Variable | Required |
+|---|---|---|
+| Tenant ID | `tenant_id` | Always |
+| Platform Key Vault resource ID | `platform_keyvault_id` | Always |
+| ESO managed identity client ID | `eso_identity_client_id` | Always |
+| ESO managed identity resource ID | `eso_identity_resource_id` | Always |
+| AKS OIDC issuer URL | `aks_oidc_issuer_url` | Always |
+| Argo CD repo-server managed identity client ID | `argocd_repo_identity_client_id` | ADO only |
+| Argo CD repo-server managed identity resource ID | `argocd_repo_identity_resource_id` | ADO only |
+| GitHub App ID | `github_app_id` | GitHub only |
+| GitHub App installation ID | `github_app_installation_id` | GitHub only |
+| GitHub App private key secret name (in Key Vault) | `github_app_private_key_secret_name` | GitHub only |
 
 ## Usage
 
@@ -199,13 +285,15 @@ kubectl get secret argocd-initial-admin-secret -n argocd \
 
 The following requirements are needed by this module:
 
-- <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) (>= 1.9, < 2.0)
+- <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) (>= 1.10, < 2.0)
 
 - <a name="requirement_azapi"></a> [azapi](#requirement\_azapi) (~> 2.4)
 
+- <a name="requirement_azurerm"></a> [azurerm](#requirement\_azurerm) (~> 4.0)
+
 - <a name="requirement_helm"></a> [helm](#requirement\_helm) (~> 2.17)
 
-- <a name="requirement_kubernetes"></a> [kubernetes](#requirement\_kubernetes) (~> 2.35)
+- <a name="requirement_kubernetes"></a> [kubernetes](#requirement\_kubernetes) (~> 2.36)
 
 - <a name="requirement_modtm"></a> [modtm](#requirement\_modtm) (~> 0.3)
 
@@ -240,6 +328,7 @@ The following resources are used by this module:
 - [kubernetes_namespace.argocd](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/namespace) (resource)
 - [kubernetes_secret.argocd_repo_creds](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/secret) (resource)
 - [kubernetes_secret.platform_identity](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/secret) (resource)
+- [kubernetes_secret_v1.argocd_repo_creds_github](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/secret_v1) (resource)
 - [modtm_telemetry.this](https://registry.terraform.io/providers/azure/modtm/latest/docs/resources/telemetry) (resource)
 - [random_uuid.telemetry](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/uuid) (resource)
 
@@ -252,27 +341,6 @@ The following input variables are required:
 Description: The OIDC issuer URL of the AKS cluster. Used as the issuer in the federated  
 identity credential so that Azure AD trusts tokens issued by this cluster's  
 service accounts.
-
-Type: `string`
-
-### <a name="input_argocd_repo_identity_client_id"></a> [argocd\_repo\_identity\_client\_id](#input\_argocd\_repo\_identity\_client\_id)
-
-Description: The client ID of the managed identity used by the Argo CD repo-server to  
-authenticate to Azure DevOps via workload identity federation. This module  
-creates the federated identity credential binding this identity to the  
-Argo CD repo-server service account. The identity must have read access  
-to the Azure DevOps repositories.
-
-Type: `string`
-
-### <a name="input_argocd_repo_identity_resource_id"></a> [argocd\_repo\_identity\_resource\_id](#input\_argocd\_repo\_identity\_resource\_id)
-
-Description: The Azure resource ID of the managed identity used by the Argo CD repo-server.  
-This is the parent resource for the federated identity credential that this  
-module creates. The federated credential binds this identity to the Argo CD  
-repo-server Kubernetes service account.
-
-Example: `/subscriptions/.../resourceGroups/.../providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-argocd-repo`
 
 Type: `string`
 
@@ -305,7 +373,8 @@ Description: The Git repository URL for the platform-gitops repository. This is 
 that Argo CD will sync to self-manage its own configuration and deploy  
 platform components (ESO, Gateway, namespaces, AppProjects, etc.).
 
-Example: `https://dev.azure.com/org/project/_git/platform-gitops`
+Example: `https://dev.azure.com/org/project/_git/platform-gitops`  
+Example: `https://github.com/org/platform-gitops`
 
 Type: `string`
 
@@ -382,16 +451,44 @@ Default: `"argocd"`
 ### <a name="input_argocd_repo_creds_url"></a> [argocd\_repo\_creds\_url](#input\_argocd\_repo\_creds\_url)
 
 Description: The base URL for the Argo CD repository credential template. All Git repos  
-whose URL starts with this prefix will use the workload identity authentication  
-configured by this module (via GIT\_ASKPASS).
+whose URL starts with this prefix will use the authentication method configured  
+by this module.
 
-If not set, defaults to the Azure DevOps organization-level URL derived from
-`var.platform_gitops_repo_url`. For example, if the platform repo URL is
-`https://dev.azure.com/org/project/_git/platform-gitops`, the default base  
-URL will be `https://dev.azure.com/org/`.
+If not set, the default is derived from `var.platform_gitops_repo_url`:
+- Azure DevOps: the organization-level URL, e.g. `https://dev.azure.com/org/`
+- GitHub: the organization-level URL, e.g. `https://github.com/org/`
 
 Set this to a more specific URL to restrict which repos use these credentials,  
 or to a broader URL if your repos span multiple organizations.
+
+Type: `string`
+
+Default: `null`
+
+### <a name="input_argocd_repo_identity_client_id"></a> [argocd\_repo\_identity\_client\_id](#input\_argocd\_repo\_identity\_client\_id)
+
+Description: The client ID of the managed identity used by the Argo CD repo-server to  
+authenticate to Azure DevOps via workload identity federation. This module  
+creates the federated identity credential binding this identity to the  
+Argo CD repo-server service account. The identity must have read access  
+to the Azure DevOps repositories.
+
+Required when git\_provider = "azuredevops".
+
+Type: `string`
+
+Default: `null`
+
+### <a name="input_argocd_repo_identity_resource_id"></a> [argocd\_repo\_identity\_resource\_id](#input\_argocd\_repo\_identity\_resource\_id)
+
+Description: The Azure resource ID of the managed identity used by the Argo CD repo-server.  
+This is the parent resource for the federated identity credential that this  
+module creates. The federated credential binds this identity to the Argo CD  
+repo-server Kubernetes service account.
+
+Required when git\_provider = "azuredevops".
+
+Example: `/subscriptions/.../resourceGroups/.../providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-argocd-repo`
 
 Type: `string`
 
@@ -439,6 +536,42 @@ Type: `string`
 
 Default: `"external-secrets"`
 
+### <a name="input_git_provider"></a> [git\_provider](#input\_git\_provider)
+
+Description: The Git hosting provider. Determines the authentication strategy for ArgoCD repository access.
+
+Type: `string`
+
+Default: `"azuredevops"`
+
+### <a name="input_github_app_id"></a> [github\_app\_id](#input\_github\_app\_id)
+
+Description: The GitHub App ID for ArgoCD repository access. Required when git\_provider = "github".
+
+Type: `string`
+
+Default: `null`
+
+### <a name="input_github_app_installation_id"></a> [github\_app\_installation\_id](#input\_github\_app\_installation\_id)
+
+Description: The GitHub App installation ID. Required when git\_provider = "github".
+
+Type: `string`
+
+Default: `null`
+
+### <a name="input_github_app_private_key_secret_name"></a> [github\_app\_private\_key\_secret\_name](#input\_github\_app\_private\_key\_secret\_name)
+
+Description: The name of the secret in var.platform\_keyvault\_id containing the GitHub App  
+PEM-encoded private key. Read at apply time via an ephemeral resource — the  
+value never appears in Terraform state or plan files.
+
+Required when git\_provider = "github".
+
+Type: `string`
+
+Default: `null`
+
 ### <a name="input_platform_gitops_repo_path"></a> [platform\_gitops\_repo\_path](#input\_platform\_gitops\_repo\_path)
 
 Description: The path within the platform-gitops repository where the Argo CD self-management  
@@ -477,7 +610,7 @@ Description: The Kubernetes namespace where Argo CD is installed.
 
 ### <a name="output_argocd_repo_federated_credential_id"></a> [argocd\_repo\_federated\_credential\_id](#output\_argocd\_repo\_federated\_credential\_id)
 
-Description: The Azure resource ID of the federated identity credential for the Argo CD repo-server.
+Description: The Azure resource ID of the federated identity credential for the Argo CD repo-server. Null when git\_provider = "github".
 
 ### <a name="output_argocd_repo_server_service_account"></a> [argocd\_repo\_server\_service\_account](#output\_argocd\_repo\_server\_service\_account)
 
@@ -501,6 +634,10 @@ Description: The name of the Kubernetes service account that the ESO federated i
 credential is bound to. The ESO Helm chart must create a service account  
 with this exact name for workload identity to function.
 
+### <a name="output_git_provider"></a> [git\_provider](#output\_git\_provider)
+
+Description: The Git hosting provider selected for this deployment.
+
 ### <a name="output_helm_release_name"></a> [helm\_release\_name](#output\_helm\_release\_name)
 
 Description: The name of the Argo CD Helm release.
@@ -517,9 +654,7 @@ platform-gitops repo when configuring the ESO ClusterSecretStore.
 
 ### <a name="output_repo_creds_url"></a> [repo\_creds\_url](#output\_repo\_creds\_url)
 
-Description: The base URL used for the Argo CD repository credential template. All Git  
-repositories whose URL starts with this prefix will use workload identity  
-authentication via GIT\_ASKPASS.
+Description: The base URL used for the ArgoCD repository credential template.
 
 ## Data Collection
 

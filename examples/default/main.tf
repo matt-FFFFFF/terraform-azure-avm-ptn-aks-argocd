@@ -45,3 +45,28 @@ module "aks_argocd_bootstrap" {
 
   enable_telemetry = var.enable_telemetry
 }
+
+# # GitHub provider example:
+# module "aks_argocd_bootstrap" {
+#   source = "../../"
+#
+#   git_provider                       = "github"
+#   github_app_id                      = "123456"
+#   github_app_installation_id         = "78901234"
+#   github_app_private_key_secret_name = "github-app-private-key"
+#
+#   tenant_id            = var.tenant_id
+#   platform_keyvault_id = var.platform_keyvault_id
+#   aks_oidc_issuer_url  = var.aks_oidc_issuer_url
+#
+#   eso_identity_client_id   = var.eso_identity_client_id
+#   eso_identity_resource_id = var.eso_identity_resource_id
+#
+#   platform_gitops_repo_url      = "https://github.com/org/platform-gitops"
+#   platform_gitops_repo_path     = "argocd"
+#   platform_gitops_repo_revision = "main"
+#
+#   # argocd_repo_creds_url = "https://github.com/org/"  # optional override
+#
+#   enable_telemetry = var.enable_telemetry
+# }

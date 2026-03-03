@@ -17,11 +17,14 @@ locals {
   # before ESO pods can authenticate to Key Vault.
   eso_federated_subject = "system:serviceaccount:${var.eso_namespace}:${var.eso_service_account_name}"
 
-  # Derive the Azure DevOps org-level URL from the platform repo URL for repo-creds template.
-  # e.g. https://dev.azure.com/org/project/_git/repo -> https://dev.azure.com/org/
+  # Derive the org-level URL from the platform repo URL for repo-creds template.
+  # Azure DevOps: https://dev.azure.com/org/project/_git/repo -> https://dev.azure.com/org/
+  # GitHub:       https://github.com/org/repo                 -> https://github.com/org/
   repo_creds_url = coalesce(
     var.argocd_repo_creds_url,
-    try(regex("^(https://dev\\.azure\\.com/[^/]+/)", var.platform_gitops_repo_url)[0], var.platform_gitops_repo_url)
+    var.git_provider == "github"
+    ? try(regex("^(https://github\\.com/[^/]+/)", var.platform_gitops_repo_url)[0], var.platform_gitops_repo_url)
+    : try(regex("^(https://dev\\.azure\\.com/[^/]+/)", var.platform_gitops_repo_url)[0], var.platform_gitops_repo_url)
   )
 
   # The GIT_ASKPASS script acquires an Azure AD token via workload identity federation
@@ -40,76 +43,78 @@ locals {
   SCRIPT
 
   # Base Helm values for Argo CD. These configure:
-  # 1. Workload identity on the repo-server (service account annotation + pod label)
-  # 2. GIT_ASKPASS environment variable pointing to the mounted askpass script
-  # 3. Volume mount for the git-askpass ConfigMap
-  # 4. Server service type
-  # 5. The self-manage Application via extraObjects
-  argocd_helm_values_base = {
-    repoServer = {
-      serviceAccount = {
-        annotations = {
-          "azure.workload.identity/client-id" = var.argocd_repo_identity_client_id
+  # 1. Server service type
+  # 2. The self-manage Application via extraObjects
+  # 3. (ADO only) Workload identity on the repo-server, GIT_ASKPASS env + volume mount
+  argocd_helm_values_base = merge(
+    {
+      server = {
+        service = {
+          type = var.argocd_server_service_type
         }
       }
-      podLabels = {
-        "azure.workload.identity/use" = "true"
-      }
-      env = [
+      extraObjects = [
         {
-          name  = "GIT_ASKPASS"
-          value = "/usr/local/bin/git-askpass.sh"
-        }
-      ]
-      volumes = [
-        {
-          name = "git-askpass"
-          configMap = {
-            name        = "argocd-git-askpass"
-            defaultMode = 493 # 0755 in octal
-          }
-        }
-      ]
-      volumeMounts = [
-        {
-          name      = "git-askpass"
-          mountPath = "/usr/local/bin/git-askpass.sh"
-          subPath   = "git-askpass.sh"
-        }
-      ]
-    }
-    server = {
-      service = {
-        type = var.argocd_server_service_type
-      }
-    }
-    extraObjects = [
-      {
-        apiVersion = "argoproj.io/v1alpha1"
-        kind       = "Application"
-        metadata = {
-          name      = "platform-root"
-          namespace = var.argocd_namespace
-        }
-        spec = {
-          project = "default"
-          source = {
-            repoURL        = var.platform_gitops_repo_url
-            path           = var.platform_gitops_repo_path
-            targetRevision = var.platform_gitops_repo_revision
-          }
-          destination = {
-            server    = "https://kubernetes.default.svc"
+          apiVersion = "argoproj.io/v1alpha1"
+          kind       = "Application"
+          metadata = {
+            name      = "platform-root"
             namespace = var.argocd_namespace
           }
-          syncPolicy = {
-            automated = {
-              prune    = true
-              selfHeal = true
+          spec = {
+            project = "default"
+            source = {
+              repoURL        = var.platform_gitops_repo_url
+              path           = var.platform_gitops_repo_path
+              targetRevision = var.platform_gitops_repo_revision
+            }
+            destination = {
+              server    = "https://kubernetes.default.svc"
+              namespace = var.argocd_namespace
+            }
+            syncPolicy = {
+              automated = {
+                prune    = true
+                selfHeal = true
+              }
             }
           }
         }
+      ]
+    },
+    var.git_provider == "azuredevops" ? {
+      repoServer = {
+        serviceAccount = {
+          annotations = {
+            "azure.workload.identity/client-id" = var.argocd_repo_identity_client_id
+          }
+        }
+        podLabels = {
+          "azure.workload.identity/use" = "true"
+        }
+        env = [
+          {
+            name  = "GIT_ASKPASS"
+            value = "/usr/local/bin/git-askpass.sh"
+          }
+        ]
+        volumes = [
+          {
+            name = "git-askpass"
+            configMap = {
+              name        = "argocd-git-askpass"
+              defaultMode = 493 # 0755 in octal
+            }
+          }
+        ]
+        volumeMounts = [
+          {
+            name      = "git-askpass"
+            mountPath = "/usr/local/bin/git-askpass.sh"
+            subPath   = "git-askpass.sh"
+          }
+        ]
       }
-    ]
-  }
+    } : {}
+  )
 }

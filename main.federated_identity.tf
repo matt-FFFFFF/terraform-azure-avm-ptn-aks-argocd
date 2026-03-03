@@ -6,6 +6,7 @@
 # The subject is derived from the Helm release name and namespace, ensuring
 # that changes to either are automatically reflected in the credential.
 resource "azapi_resource" "argocd_repo_federated_credential" {
+  count     = var.git_provider == "azuredevops" ? 1 : 0
   type      = "Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31"
   name      = "fc-argocd-repo-server"
   parent_id = var.argocd_repo_identity_resource_id
@@ -15,6 +16,17 @@ resource "azapi_resource" "argocd_repo_federated_credential" {
       audiences = ["api://AzureADTokenExchange"]
       issuer    = var.aks_oidc_issuer_url
       subject   = local.argocd_repo_server_federated_subject
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.argocd_repo_identity_client_id != null
+      error_message = "argocd_repo_identity_client_id is required when git_provider = \"azuredevops\"."
+    }
+    precondition {
+      condition     = var.argocd_repo_identity_resource_id != null
+      error_message = "argocd_repo_identity_resource_id is required when git_provider = \"azuredevops\"."
     }
   }
 }
