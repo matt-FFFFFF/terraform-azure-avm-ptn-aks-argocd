@@ -86,9 +86,110 @@ secrets are needed.
 
 ## Prerequisites
 
-- AKS cluster with OIDC issuer enabled and workload identity webhook installed
-- Managed identity for Argo CD repo-server with read access to Azure DevOps repos
-  (this module creates the federated credential - do NOT create it in WS1)
-- Managed identity for ESO with secret and certificate read permissions on Key Vault
-  (federated credential for ESO is managed by Argo CD after bootstrap)
-- `azapi`, `helm`, and `kubernetes` Terraform providers configured
+### Tools
+
+| Tool | Version | Purpose |
+|---|---|---|
+| [Terraform](https://developer.hashicorp.com/terraform/install) | `>= 1.9, < 2.0` | Infrastructure as Code runtime |
+| [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) | Latest | Authentication to Azure for the `azapi` provider |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | Latest | Optional: port-forwarding to Argo CD server, cluster debugging |
+
+### Terraform Providers
+
+The following providers must be configured in your root module. See the
+[default example](examples/default/) for a complete provider configuration.
+
+| Provider | Source | Version Constraint | Purpose |
+|---|---|---|---|
+| `azapi` | `Azure/azapi` | `~> 2.4` | Creates federated identity credentials on managed identities |
+| `helm` | `hashicorp/helm` | `~> 2.17` | Installs the Argo CD Helm chart |
+| `kubernetes` | `hashicorp/kubernetes` | `~> 2.35` | Creates namespaces, secrets, and ConfigMaps on the AKS cluster |
+
+The `modtm` and `random` providers are used internally for AVM telemetry and do
+not require explicit configuration.
+
+### Azure Resources (Workspace 1)
+
+The following resources must exist **before** running this module. They are
+typically created in a separate Terraform workspace (Workspace 1) that manages
+core infrastructure:
+
+| Resource | Requirements |
+|---|---|
+| **AKS cluster** | OIDC issuer enabled (`oidc_issuer_enabled = true`), workload identity webhook installed (`workload_identity_enabled = true`) |
+| **Managed identity: Argo CD repo-server** | Must have **read access** to Azure DevOps Git repositories. Do **not** create the federated credential in WS1 -- this module creates it. |
+| **Managed identity: ESO** | Must have **Secret Get** and **Certificate Get** permissions on the platform Key Vault. This module creates the federated credential binding. |
+| **Azure Key Vault** | Stores platform-level secrets (e.g. wildcard TLS certificate). Team workloads use their own Key Vaults. |
+
+### Azure Permissions
+
+The identity running Terraform must have:
+
+- **Write access** to create federated identity credentials on both managed
+  identities (`Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials/write`)
+- **Kubernetes cluster access** via client certificate, `az aks get-credentials`,
+  or another supported authentication method for the `helm` and `kubernetes` providers
+
+### Azure DevOps
+
+- A **platform-gitops repository** that contains Argo CD Application manifests,
+  platform component definitions, and team configuration. See
+  [`examples/platform-gitops/`](examples/platform-gitops/) for a reference
+  structure.
+- The Argo CD repo-server managed identity must be granted read access to all
+  Git repositories it needs to sync (at the Azure DevOps organization or project
+  level).
+
+### Workspace 1 Outputs
+
+This module consumes the following outputs from your infrastructure workspace:
+
+| Output | Maps to Variable |
+|---|---|
+| Tenant ID | `tenant_id` |
+| Platform Key Vault resource ID | `platform_keyvault_id` |
+| ESO managed identity client ID | `eso_identity_client_id` |
+| ESO managed identity resource ID | `eso_identity_resource_id` |
+| Argo CD repo-server managed identity client ID | `argocd_repo_identity_client_id` |
+| Argo CD repo-server managed identity resource ID | `argocd_repo_identity_resource_id` |
+| AKS OIDC issuer URL | `aks_oidc_issuer_url` |
+
+## Usage
+
+```hcl
+module "aks_argocd_bootstrap" {
+  source  = "Azure/avm-ptn-aks-argocd/azurerm"
+  version = "~> 0.1"
+
+  # Core identity values from Workspace 1 outputs
+  tenant_id                        = var.tenant_id
+  platform_keyvault_id             = var.platform_keyvault_id
+  eso_identity_client_id           = var.eso_identity_client_id
+  eso_identity_resource_id         = var.eso_identity_resource_id
+  argocd_repo_identity_client_id   = var.argocd_repo_identity_client_id
+  argocd_repo_identity_resource_id = var.argocd_repo_identity_resource_id
+
+  # AKS OIDC issuer URL for federated identity credentials
+  aks_oidc_issuer_url = var.aks_oidc_issuer_url
+
+  # Platform GitOps repo in Azure DevOps
+  platform_gitops_repo_url      = "https://dev.azure.com/org/project/_git/platform-gitops"
+  platform_gitops_repo_path     = "argocd"
+  platform_gitops_repo_revision = "main"
+}
+```
+
+### Accessing the Argo CD UI
+
+After applying, port-forward to the Argo CD server:
+
+```bash
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+```
+
+Retrieve the initial admin password:
+
+```bash
+kubectl get secret argocd-initial-admin-secret -n argocd \
+  -o jsonpath='{.data.password}' | base64 -d
+```
