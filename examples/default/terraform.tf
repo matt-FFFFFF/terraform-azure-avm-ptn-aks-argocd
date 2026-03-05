@@ -20,7 +20,7 @@ terraform {
 provider "azapi" {}
 
 provider "helm" {
-  kubernetes {
+  kubernetes = {
     host                   = var.aks_host
     client_certificate     = base64decode(var.aks_client_certificate)
     client_key             = base64decode(var.aks_client_key)

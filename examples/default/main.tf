@@ -68,5 +68,9 @@ module "aks_argocd_bootstrap" {
 #
 #   # argocd_repo_creds_url = "https://github.com/org/"  # optional override
 #
+#   # For GitHub Enterprise Server, set the API base URL:
+#   # github_enterprise_base_url = "https://github.mycompany.com/api/v3"
+#   # platform_gitops_repo_url   = "https://github.mycompany.com/org/platform-gitops"
+#
 #   enable_telemetry = var.enable_telemetry
 # }

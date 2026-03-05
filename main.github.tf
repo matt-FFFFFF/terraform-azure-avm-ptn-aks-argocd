@@ -22,12 +22,17 @@ resource "kubernetes_secret_v1" "argocd_repo_creds_github" {
   type = "Opaque"
 
   # Non-sensitive fields in regular data.
-  data = {
-    type                    = "git"
-    url                     = local.repo_creds_url
-    githubAppID             = var.github_app_id
-    githubAppInstallationID = var.github_app_installation_id
-  }
+  data = merge(
+    {
+      type                    = "git"
+      url                     = local.repo_creds_url
+      githubAppID             = var.github_app_id
+      githubAppInstallationID = var.github_app_installation_id
+    },
+    var.github_enterprise_base_url != null ? {
+      githubAppEnterpriseBaseURL = var.github_enterprise_base_url
+    } : {}
+  )
 
   # Private key via write-only attribute — never stored in state.
   data_wo = {

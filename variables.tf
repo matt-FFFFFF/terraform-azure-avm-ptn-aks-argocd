@@ -180,6 +180,28 @@ Required when git_provider = "github".
 DESCRIPTION
 }
 
+variable "github_enterprise_base_url" {
+  type        = string
+  default     = null
+  description = <<DESCRIPTION
+The API base URL of a GitHub Enterprise Server instance, e.g.
+`https://github.mycompany.com/api/v3`. Set this when using GitHub Enterprise
+Server instead of github.com. When null (the default), ArgoCD authenticates
+against the public GitHub API.
+
+When set, this value is written as `githubAppEnterpriseBaseURL` in the ArgoCD
+repo-creds secret, and the repo-creds URL prefix is derived from the
+`platform_gitops_repo_url` hostname instead of assuming github.com.
+
+Only used when git_provider = "github".
+DESCRIPTION
+
+  validation {
+    condition     = var.github_enterprise_base_url == null || can(regex("^https://", var.github_enterprise_base_url))
+    error_message = "github_enterprise_base_url must be an HTTPS URL (e.g. https://github.example.com/api/v3)."
+  }
+}
+
 variable "aks_oidc_issuer_url" {
   type        = string
   nullable    = false

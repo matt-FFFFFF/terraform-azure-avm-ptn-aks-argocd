@@ -20,10 +20,11 @@ locals {
   # Derive the org-level URL from the platform repo URL for repo-creds template.
   # Azure DevOps: https://dev.azure.com/org/project/_git/repo -> https://dev.azure.com/org/
   # GitHub:       https://github.com/org/repo                 -> https://github.com/org/
+  # GitHub (GHE): https://github.corp.com/org/repo            -> https://github.corp.com/org/
   repo_creds_url = coalesce(
     var.argocd_repo_creds_url,
     var.git_provider == "github"
-    ? try(regex("^(https://github\\.com/[^/]+/)", var.platform_gitops_repo_url)[0], var.platform_gitops_repo_url)
+    ? try(regex("^(https://[^/]+/[^/]+/)", var.platform_gitops_repo_url)[0], var.platform_gitops_repo_url)
     : try(regex("^(https://dev\\.azure\\.com/[^/]+/)", var.platform_gitops_repo_url)[0], var.platform_gitops_repo_url)
   )
 

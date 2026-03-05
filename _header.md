@@ -100,6 +100,7 @@ secrets are needed.
 ## GitHub Authentication
 
 Set `git_provider = "github"` to use ArgoCD's native GitHub App authentication.
+This works with both **github.com** and **GitHub Enterprise Server** instances.
 The flow:
 
 1. You create a GitHub App, install it on your organization, and store the
@@ -152,6 +153,39 @@ module "aks_argocd_bootstrap" {
 > **Note:** When using `git_provider = "github"`, the `argocd_repo_identity_client_id`
 > and `argocd_repo_identity_resource_id` variables are not required (they default
 > to `null`). The `azurerm` provider must be configured in your root module.
+
+### GitHub Enterprise Server
+
+For GitHub Enterprise Server, set `github_enterprise_base_url` to the API base
+URL of your instance (e.g. `https://github.mycompany.com/api/v3`). This tells
+ArgoCD to authenticate against your GHE API instead of the public GitHub API.
+
+The module automatically derives the repo-creds URL prefix from
+`platform_gitops_repo_url`, so no special URL handling is needed — just use
+your GHE URLs directly.
+
+```hcl
+module "aks_argocd_bootstrap" {
+  source = "Azure/avm-ptn-aks-argocd/azurerm"
+
+  git_provider                       = "github"
+  github_app_id                      = "123456"
+  github_app_installation_id         = "78901234"
+  github_app_private_key_secret_name = "github-app-private-key"
+  github_enterprise_base_url         = "https://github.mycompany.com/api/v3"
+
+  tenant_id            = var.tenant_id
+  platform_keyvault_id = var.platform_keyvault_id
+  aks_oidc_issuer_url  = var.aks_oidc_issuer_url
+
+  eso_identity_client_id   = var.eso_identity_client_id
+  eso_identity_resource_id = var.eso_identity_resource_id
+
+  platform_gitops_repo_url      = "https://github.mycompany.com/org/platform-gitops"
+  platform_gitops_repo_path     = "argocd"
+  platform_gitops_repo_revision = "main"
+}
+```
 
 ## Prerequisites
 
@@ -239,6 +273,7 @@ This module consumes the following outputs from your infrastructure workspace:
 | GitHub App ID | `github_app_id` | GitHub only |
 | GitHub App installation ID | `github_app_installation_id` | GitHub only |
 | GitHub App private key secret name (in Key Vault) | `github_app_private_key_secret_name` | GitHub only |
+| GitHub Enterprise API base URL | `github_enterprise_base_url` | GHE only |
 
 ## Usage
 
