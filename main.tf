@@ -2,13 +2,10 @@ resource "kubernetes_namespace" "argocd" {
   metadata {
     name = var.argocd_namespace
 
-    labels = merge(
-      var.tags,
-      {
-        "app.kubernetes.io/managed-by" = "terraform"
-        "app.kubernetes.io/part-of"    = "argocd-bootstrap"
-      }
-    )
+    labels = {
+      "app.kubernetes.io/managed-by" = "terraform"
+      "app.kubernetes.io/part-of"    = "argocd-bootstrap"
+    }
   }
 
   lifecycle {

@@ -22,12 +22,13 @@ resource "kubernetes_secret_v1" "argocd_repo_creds_github" {
   type = "Opaque"
 
   # Non-sensitive fields in regular data.
-  data = merge(
+  data_wo = merge(
     {
       type                    = "git"
       url                     = local.repo_creds_url
       githubAppID             = var.github_app_id
       githubAppInstallationID = var.github_app_installation_id
+      githubAppPrivateKey     = ephemeral.azurerm_key_vault_secret.github_app_private_key[0].value
     },
     var.github_enterprise_base_url != null ? {
       githubAppEnterpriseBaseURL = var.github_enterprise_base_url
@@ -35,10 +36,7 @@ resource "kubernetes_secret_v1" "argocd_repo_creds_github" {
   )
 
   # Private key via write-only attribute — never stored in state.
-  data_wo = {
-    githubAppPrivateKey = ephemeral.azurerm_key_vault_secret.github_app_private_key[0].value
-  }
-  data_wo_revision = 1
+  data_wo_revision = var.github_repo_creds_revision
 
   lifecycle {
     ignore_changes = [

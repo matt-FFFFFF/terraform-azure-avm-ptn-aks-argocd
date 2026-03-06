@@ -217,12 +217,9 @@ DESCRIPTION
   }
 }
 
-variable "tags" {
-  type        = map(string)
-  default     = {}
+variable "github_repo_creds_revision" {
+  type        = number
+  default     = 0
   nullable    = false
-  description = <<DESCRIPTION
-A map of tags to apply to resources that support tagging. These are passed
-as labels to Kubernetes resources created by this module.
-DESCRIPTION
+  description = "The current revision of the write-only data. Incrementing this integer value will cause Terraform to update the write-only value."
 }
