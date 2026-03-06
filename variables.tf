@@ -219,7 +219,12 @@ DESCRIPTION
 
 variable "github_repo_creds_revision" {
   type        = number
-  default     = 0
+  default     = 1
   nullable    = false
-  description = "The current revision of the write-only data. Incrementing this integer value will cause Terraform to update the write-only value."
+  description = "The current revision of the write-only data. Incrementing this integer value will cause Terraform to update the write-only value. Must be >= 1"
+
+  validation {
+    condition     = var.github_repo_creds_revision >= 1 && floor(var.github_repo_creds_revision) == var.github_repo_creds_revision
+    error_message = "Value must be integer greater than or eaual to 1."
+  }
 }
