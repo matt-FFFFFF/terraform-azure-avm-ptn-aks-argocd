@@ -146,7 +146,6 @@ DESCRIPTION
 
 variable "git_provider" {
   type        = string
-  default     = "azuredevops"
   nullable    = false
   description = "The Git hosting provider. Determines the authentication strategy for ArgoCD repository access."
 

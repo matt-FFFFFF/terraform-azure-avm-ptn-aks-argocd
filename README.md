@@ -402,6 +402,12 @@ Example: `/subscriptions/.../resourceGroups/.../providers/Microsoft.ManagedIdent
 
 Type: `string`
 
+### <a name="input_git_provider"></a> [git\_provider](#input\_git\_provider)
+
+Description: The Git hosting provider. Determines the authentication strategy for ArgoCD repository access.
+
+Type: `string`
+
 ### <a name="input_platform_gitops_repo_url"></a> [platform\_gitops\_repo\_url](#input\_platform\_gitops\_repo\_url)
 
 Description: The Git repository URL for the platform-gitops repository. This is the repo  
@@ -571,14 +577,6 @@ Type: `string`
 
 Default: `"external-secrets"`
 
-### <a name="input_git_provider"></a> [git\_provider](#input\_git\_provider)
-
-Description: The Git hosting provider. Determines the authentication strategy for ArgoCD repository access.
-
-Type: `string`
-
-Default: `"azuredevops"`
-
 ### <a name="input_github_app_id"></a> [github\_app\_id](#input\_github\_app\_id)
 
 Description: The GitHub App ID for ArgoCD repository access. Required when git\_provider = "github".
@@ -624,6 +622,14 @@ Type: `string`
 
 Default: `null`
 
+### <a name="input_github_repo_creds_revision"></a> [github\_repo\_creds\_revision](#input\_github\_repo\_creds\_revision)
+
+Description: The current revision of the write-only data. Incrementing this integer value will cause Terraform to update the write-only value. Must be >= 1
+
+Type: `number`
+
+Default: `1`
+
 ### <a name="input_platform_gitops_repo_path"></a> [platform\_gitops\_repo\_path](#input\_platform\_gitops\_repo\_path)
 
 Description: The path within the platform-gitops repository where the Argo CD self-management  
@@ -642,15 +648,6 @@ to sync. Defaults to `main`.
 Type: `string`
 
 Default: `"main"`
-
-### <a name="input_tags"></a> [tags](#input\_tags)
-
-Description: A map of tags to apply to resources that support tagging. These are passed  
-as labels to Kubernetes resources created by this module.
-
-Type: `map(string)`
-
-Default: `{}`
 
 ## Outputs
 
