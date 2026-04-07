@@ -31,7 +31,7 @@ team-service:
 
   httpRoute:
     enabled: true
-    hostname: api.example.com
+    hostname: team-a-api.example.com
     rules:
       - matches:
           - path:

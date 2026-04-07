@@ -59,7 +59,7 @@ service:
 # -- HTTPRoute configuration for Gateway API ingress.
 httpRoute:
   enabled: false
-  # -- The hostname for this service (e.g. api.example.com).
+  # -- The hostname for this service (e.g. my-service.example.com).
   hostname: ""
   # -- Gateway reference. Must match the platform Gateway.
   gateway:

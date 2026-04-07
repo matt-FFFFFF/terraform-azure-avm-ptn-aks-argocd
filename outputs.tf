@@ -64,6 +64,20 @@ with this exact name for workload identity to function.
 DESCRIPTION
 }
 
+output "external_dns_federated_credential_id" {
+  value       = azapi_resource.external_dns_federated_credential.id
+  description = "The Azure resource ID of the federated identity credential for ExternalDNS."
+}
+
+output "external_dns_service_account_name" {
+  value       = var.external_dns_service_account_name
+  description = <<DESCRIPTION
+The name of the Kubernetes service account that the ExternalDNS federated
+identity credential is bound to. The ExternalDNS Helm chart must create a
+service account with this exact name for workload identity to function.
+DESCRIPTION
+}
+
 output "git_provider" {
   value       = var.git_provider
   description = "The Git hosting provider selected for this deployment."

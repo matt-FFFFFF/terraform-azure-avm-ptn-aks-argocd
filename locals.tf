@@ -12,6 +12,11 @@ locals {
   # Kubernetes service account used by the Argo CD repo-server pod.
   argocd_repo_server_federated_subject = "system:serviceaccount:${var.argocd_namespace}:${local.argocd_repo_server_sa}"
 
+  # The federated identity credential subject for the ExternalDNS controller.
+  # ExternalDNS is deployed by Argo CD (sync wave 2), but the FIC must exist
+  # before ExternalDNS pods can authenticate to Azure DNS via workload identity.
+  external_dns_federated_subject = "system:serviceaccount:${var.external_dns_namespace}:${var.external_dns_service_account_name}"
+
   # The federated identity credential subject for the ESO controller.
   # ESO is deployed by Argo CD (sync wave 0), but the FIC must exist
   # before ESO pods can authenticate to Key Vault.

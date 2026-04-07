@@ -4,7 +4,8 @@
 # secret created by the ExternalSecret.
 #
 # Team HTTPRoutes attach to this Gateway via parentRefs.
-# Replace <DOMAIN> with your actual domain (e.g. example.com).
+# ExternalDNS watches this Gateway and the attached HTTPRoutes to
+# automatically create DNS records in Azure DNS.
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -15,11 +16,15 @@ metadata:
     networking.istio.io/service-type: LoadBalancer
 spec:
   gatewayClassName: istio
+  infrastructure:
+    annotations:
+      service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+      service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "nodeSubnet"
   listeners:
     - name: https
       port: 443
       protocol: HTTPS
-      hostname: "*.<DOMAIN>"
+      hostname: "*.example.com"
       tls:
         mode: Terminate
         certificateRefs:
@@ -31,7 +36,7 @@ spec:
     - name: http
       port: 80
       protocol: HTTP
-      hostname: "*.<DOMAIN>"
+      hostname: "*.example.com"
       allowedRoutes:
         namespaces:
           from: All

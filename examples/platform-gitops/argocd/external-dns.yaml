@@ -1,0 +1,89 @@
+# Sync Wave 2: ExternalDNS
+# Deploys ExternalDNS from its official Helm chart. ExternalDNS watches
+# Gateway API resources (Gateway, HTTPRoute) and automatically creates
+# DNS records in Azure DNS for hostnames declared on those resources.
+#
+# Authentication to Azure DNS uses workload identity. The managed identity
+# must have DNS Zone Contributor on the target Azure DNS zone. The federated
+# identity credential is created by Terraform (this module).
+#
+# This must run after Istio (wave 1) so that the Gateway API CRDs exist.
+# Runs alongside the platform-gateway and TLS wildcard (wave 2).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: external-dns
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://kubernetes-sigs.github.io/external-dns
+    chart: external-dns
+    targetRevision: 1.15.1
+    helm:
+      valuesObject:
+        # -- Use the Gateway API source to read hostnames from Gateway and
+        # HTTPRoute resources, rather than Ingress.
+        sources:
+          - gateway-httproute
+          - gateway-grpcroute
+
+        # -- Azure DNS provider configuration.
+        provider:
+          name: azure
+
+        # -- Domain filter restricts ExternalDNS to only manage records
+        # under this domain. Prevents accidental changes to other zones.
+        domainFilters:
+          - example.com
+
+        # -- TXT record owner ID to prevent conflicts when multiple
+        # ExternalDNS instances manage the same zone.
+        txtOwnerId: aks-nonprod
+
+        # -- Policy: sync creates and deletes records. Use "upsert-only"
+        # if you want ExternalDNS to never delete records.
+        policy: sync
+
+        # -- Log level for troubleshooting. Use "debug" temporarily if needed.
+        logLevel: info
+
+        # -- Interval between DNS sync cycles.
+        interval: 1m
+
+        serviceAccount:
+          annotations:
+            azure.workload.identity/client-id: <EXTERNAL_DNS_IDENTITY_CLIENT_ID>
+
+        podLabels:
+          azure.workload.identity/use: "true"
+
+        # -- Azure-specific configuration passed via environment variables.
+        # ExternalDNS reads these to authenticate and locate the DNS zone.
+        # Note: AZURE_TENANT_ID and AZURE_CLIENT_ID are injected automatically
+        # by the AKS workload identity webhook via the pod label above.
+        env:
+          - name: AZURE_SUBSCRIPTION_ID
+            value: <SUBSCRIPTION_ID>
+          - name: AZURE_RESOURCE_GROUP
+            value: <DNS_ZONE_RESOURCE_GROUP>
+
+        extraArgs:
+          - --azure-config-file=
+          # -- Use workload identity instead of a config file.
+          - --txt-prefix=externaldns-
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: external-dns
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
