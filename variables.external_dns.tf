@@ -61,3 +61,33 @@ which defaults to the release name. Used to construct the federated identity
 credential subject.
 DESCRIPTION
 }
+
+variable "external_dns_subscription_id" {
+  type        = string
+  nullable    = false
+  description = <<DESCRIPTION
+The Azure subscription ID containing the DNS zone that ExternalDNS manages.
+Written to the external-dns azure-config ConfigMap so the Azure provider
+can locate the DNS zone.
+DESCRIPTION
+
+  validation {
+    condition     = can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", var.external_dns_subscription_id))
+    error_message = "The external_dns_subscription_id must be a valid UUID."
+  }
+}
+
+variable "external_dns_resource_group" {
+  type        = string
+  nullable    = false
+  description = <<DESCRIPTION
+The name of the Azure resource group containing the DNS zone that ExternalDNS
+manages. Written to the external-dns azure-config ConfigMap so the Azure
+provider can locate the DNS zone.
+DESCRIPTION
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9._()-]{1,90}$", var.external_dns_resource_group))
+    error_message = "The external_dns_resource_group must be a valid Azure resource group name."
+  }
+}

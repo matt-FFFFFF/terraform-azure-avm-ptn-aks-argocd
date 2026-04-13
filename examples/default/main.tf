@@ -22,6 +22,12 @@ module "aks_argocd_bootstrap" {
   # AKS OIDC issuer URL for federated identity credential
   aks_oidc_issuer_url = var.aks_oidc_issuer_url
 
+  # ExternalDNS identity and DNS zone configuration
+  external_dns_identity_client_id   = var.external_dns_identity_client_id
+  external_dns_identity_resource_id = var.external_dns_identity_resource_id
+  external_dns_subscription_id      = var.external_dns_subscription_id
+  external_dns_resource_group       = var.external_dns_resource_group
+
   # Platform GitOps repo in Azure DevOps
   platform_gitops_repo_url      = "https://dev.azure.com/org/project/_git/platform-gitops"
   platform_gitops_repo_path     = "argocd"

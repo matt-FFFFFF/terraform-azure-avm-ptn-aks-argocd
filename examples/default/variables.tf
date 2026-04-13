@@ -64,3 +64,23 @@ variable "aks_oidc_issuer_url" {
   type        = string
   description = "The OIDC issuer URL of the AKS cluster."
 }
+
+variable "external_dns_identity_client_id" {
+  type        = string
+  description = "The client ID of the managed identity for ExternalDNS."
+}
+
+variable "external_dns_identity_resource_id" {
+  type        = string
+  description = "The Azure resource ID of the managed identity for ExternalDNS."
+}
+
+variable "external_dns_subscription_id" {
+  type        = string
+  description = "The Azure subscription ID containing the DNS zone managed by ExternalDNS."
+}
+
+variable "external_dns_resource_group" {
+  type        = string
+  description = "The Azure resource group containing the DNS zone managed by ExternalDNS."
+}

@@ -7,6 +7,10 @@
 # must have DNS Zone Contributor on the target Azure DNS zone. The federated
 # identity credential is created by Terraform (this module).
 #
+# Azure provider configuration (tenant, subscription, resource group) is
+# supplied via a ConfigMap (external-dns-azure-config) created by Terraform
+# and mounted at /etc/kubernetes/azure.json.
+#
 # This must run after Istio (wave 1) so that the Gateway API CRDs exist.
 # Runs alongside the platform-gateway and TLS wildcard (wave 2).
 apiVersion: argoproj.io/v1alpha1
@@ -62,19 +66,22 @@ spec:
         podLabels:
           azure.workload.identity/use: "true"
 
-        # -- Azure-specific configuration passed via environment variables.
-        # ExternalDNS reads these to authenticate and locate the DNS zone.
-        # Note: AZURE_TENANT_ID and AZURE_CLIENT_ID are injected automatically
-        # by the AKS workload identity webhook via the pod label above.
-        env:
-          - name: AZURE_SUBSCRIPTION_ID
-            value: <SUBSCRIPTION_ID>
-          - name: AZURE_RESOURCE_GROUP
-            value: <DNS_ZONE_RESOURCE_GROUP>
+        # -- Mount the azure-config ConfigMap created by Terraform.
+        # ExternalDNS reads /etc/kubernetes/azure.json at startup for
+        # Azure provider configuration. The ConfigMap contains only
+        # non-sensitive metadata (tenant, subscription, resource group)
+        # plus useWorkloadIdentityExtension=true.
+        extraVolumes:
+          - name: azure-config
+            configMap:
+              name: external-dns-azure-config
+
+        extraVolumeMounts:
+          - name: azure-config
+            mountPath: /etc/kubernetes
+            readOnly: true
 
         extraArgs:
-          - --azure-config-file=
-          # -- Use workload identity instead of a config file.
           - --txt-prefix=externaldns-
 
   destination:
@@ -85,5 +92,4 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
-      - CreateNamespace=true
       - ServerSideApply=true
