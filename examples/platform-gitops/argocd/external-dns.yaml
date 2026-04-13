@@ -59,10 +59,6 @@ spec:
         # -- Interval between DNS sync cycles.
         interval: 1m
 
-        serviceAccount:
-          annotations:
-            azure.workload.identity/client-id: <EXTERNAL_DNS_IDENTITY_CLIENT_ID>
-
         podLabels:
           azure.workload.identity/use: "true"
 

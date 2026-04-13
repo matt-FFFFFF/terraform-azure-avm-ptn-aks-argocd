@@ -58,6 +58,7 @@ resource "kubernetes_config_map" "external_dns_azure_config" {
       tenantId                     = var.tenant_id
       subscriptionId               = var.external_dns_subscription_id
       resourceGroup                = var.external_dns_resource_group
+      aadClientId                  = var.external_dns_identity_client_id
       useWorkloadIdentityExtension = true
     })
   }
