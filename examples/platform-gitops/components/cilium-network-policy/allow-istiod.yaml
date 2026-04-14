@@ -1,0 +1,25 @@
+# Allow all meshed pods (any namespace) to reach istiod for:
+#   - port 15012: xDS discovery and mTLS certificate (SDS) bootstrap
+#   - port 15014: control plane metrics/monitoring
+#
+# Without this policy, Cilium blocks sidecar init containers from
+# connecting to istiod during startup, causing pods to stay in
+# PodInitializing with "connection refused" on the readiness probe.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-istiod
+  namespace: aks-istio-system
+spec:
+  endpointSelector:
+    matchLabels:
+      app: istiod
+  ingress:
+    - fromEndpoints:
+        - {}
+      toPorts:
+        - ports:
+            - port: "15012"
+              protocol: TCP
+            - port: "15014"
+              protocol: TCP

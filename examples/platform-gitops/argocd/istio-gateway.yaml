@@ -26,6 +26,8 @@ spec:
           type: LoadBalancer
           annotations:
             service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: /healthz/ready
+            service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+            service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "nodeSubnet"
   destination:
     server: https://kubernetes.default.svc
     namespace: istio-ingress
