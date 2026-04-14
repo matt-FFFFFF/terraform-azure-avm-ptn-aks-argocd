@@ -20,6 +20,7 @@ spec:
     annotations:
       service.beta.kubernetes.io/azure-load-balancer-internal: "true"
       service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "nodeSubnet"
+      service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: /healthz/ready
   listeners:
     - name: https
       port: 443
