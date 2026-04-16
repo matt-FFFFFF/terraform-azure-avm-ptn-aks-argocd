@@ -15,7 +15,7 @@ DESCRIPTION
 
 variable "argocd_helm_version" {
   type        = string
-  default     = "7.8.8"
+  default     = "9.5.0"
   nullable    = false
   description = <<DESCRIPTION
 The version of the Argo CD Helm chart to install. This is the chart version,

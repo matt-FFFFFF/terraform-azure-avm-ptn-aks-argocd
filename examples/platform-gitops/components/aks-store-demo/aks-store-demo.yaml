@@ -38,9 +38,7 @@ spec:
             requests:
               cpu: 5m
               memory: 75Mi
-            limits:
-              cpu: 25m
-              memory: 1024Mi
+
           livenessProbe:
             exec:
               command:
@@ -124,9 +122,7 @@ spec:
             requests:
               cpu: 10m
               memory: 128Mi
-            limits:
-              cpu: 250m
-              memory: 256Mi
+
           startupProbe:
             tcpSocket:
               port: 5672
@@ -224,9 +220,6 @@ spec:
             requests:
               cpu: 1m
               memory: 50Mi
-            limits:
-              cpu: 100m
-              memory: 256Mi
           startupProbe:
             httpGet:
               path: /health
@@ -257,9 +250,6 @@ spec:
             requests:
               cpu: 1m
               memory: 50Mi
-            limits:
-              cpu: 100m
-              memory: 256Mi
 ---
 apiVersion: v1
 kind: Service
@@ -317,9 +307,6 @@ spec:
             requests:
               cpu: 1m
               memory: 6Mi
-            limits:
-              cpu: 5m
-              memory: 20Mi
           startupProbe:
             httpGet:
               path: /health
@@ -382,9 +369,6 @@ spec:
             requests:
               cpu: 1m
               memory: 1Mi
-            limits:
-              cpu: 2m
-              memory: 20Mi
           readinessProbe:
             httpGet:
               path: /health
@@ -442,9 +426,6 @@ spec:
             requests:
               cpu: 1m
               memory: 200Mi
-            limits:
-              cpu: 1000m
-              memory: 512Mi
           startupProbe:
             httpGet:
               path: /health
@@ -508,9 +489,6 @@ spec:
             requests:
               cpu: 1m
               memory: 200Mi
-            limits:
-              cpu: 1000m
-              memory: 512Mi
           startupProbe:
             httpGet:
               path: /health
@@ -576,9 +554,6 @@ spec:
             requests:
               cpu: 1m
               memory: 1Mi
-            limits:
-              cpu: 2m
-              memory: 20Mi
           readinessProbe:
             exec:
               command:
@@ -627,9 +602,6 @@ spec:
             requests:
               cpu: 1m
               memory: 1Mi
-            limits:
-              cpu: 2m
-              memory: 20Mi
           readinessProbe:
             exec:
               command:

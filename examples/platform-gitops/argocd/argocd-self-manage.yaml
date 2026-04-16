@@ -30,7 +30,7 @@ spec:
   source:
     repoURL: https://argoproj.github.io/argo-helm
     chart: argo-cd
-    targetRevision: 7.8.8
+    targetRevision: 9.5.0
     helm:
       releaseName: argocd
       valuesObject:
@@ -55,10 +55,14 @@ spec:
         configs:
           params:
             server.insecure: true
-        redis:
-          secret:
-            init:
-              enabled: false
+          cm:
+            resource.exclusions: |
+              - apiGroups:
+                  - cilium.io
+                kinds:
+                  - CiliumIdentity
+                clusters:
+                  - "*"
         server:
           service:
             type: ClusterIP

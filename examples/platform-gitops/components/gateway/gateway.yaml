@@ -1,7 +1,8 @@
 # Gateway API Gateway resource for ingress TLS termination.
-# This creates the actual Gateway that Istio's gateway controller
-# provisions. The TLS certificate is sourced from the wildcard-tls
-# secret created by the ExternalSecret.
+# Uses the Istio automated deployment model — Istio automatically
+# provisions a Deployment, Service, HPA, and PDB for this Gateway.
+# The TLS certificate is sourced from the wildcard-tls secret
+# created by the ExternalSecret.
 #
 # Team HTTPRoutes attach to this Gateway via parentRefs.
 # ExternalDNS watches this Gateway and the attached HTTPRoutes to
@@ -11,16 +12,12 @@ kind: Gateway
 metadata:
   name: platform-gateway
   namespace: istio-ingress
-  annotations:
-    # Ensure the gateway controller is Istio
-    networking.istio.io/service-type: LoadBalancer
 spec:
   gatewayClassName: istio
   infrastructure:
     annotations:
       service.beta.kubernetes.io/azure-load-balancer-internal: "true"
       service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "nodeSubnet"
-      service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: /healthz/ready
   listeners:
     - name: https
       port: 443
