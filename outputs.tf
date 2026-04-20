@@ -13,8 +13,8 @@ or configuring ingress/gateway routes:
 DESCRIPTION
 }
 
-output "eso_identity_secret_name" {
-  value       = kubernetes_secret.eso_identity.metadata[0].name
+output "platform_identity_secret_name" {
+  value       = kubernetes_secret.platform_identity.metadata[0].name
   description = <<DESCRIPTION
 The name of the Kubernetes secret containing platform identity values
 (ESO client ID, Key Vault name, tenant ID). Reference this in the

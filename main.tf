@@ -71,7 +71,7 @@ resource "kubernetes_config_map" "external_dns_azure_config" {
   }
 }
 
-resource "kubernetes_secret" "eso_identity" {
+resource "kubernetes_secret" "platform_identity" {
   metadata {
     name      = "platform-identity"
     namespace = kubernetes_namespace.argocd.metadata[0].name
