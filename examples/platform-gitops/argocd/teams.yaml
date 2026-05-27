@@ -19,10 +19,6 @@
 #   3. Provision the team's UAMI + federated credential out-of-band, capture
 #      the clientId, and put it in the config file (optional).
 #   4. Open a PR. After merge, Argo CD handles the rest.
-#
-# Implementation note: complex values (lists, maps) are passed via helm.values
-# (a templated YAML string) rather than helm.valuesObject so that the git file
-# generator's per-key fields can be re-serialized to YAML using `toYaml`.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -42,7 +38,7 @@ spec:
           - path: "config/teams/*.yaml"
   template:
     metadata:
-      name: "team-{{ `{{ .name }}` }}"
+      name: "team-{{ .name }}"
       namespace: argocd
     spec:
       project: default
@@ -51,36 +47,25 @@ spec:
         path: components/teams
         targetRevision: main
         helm:
-          releaseName: "team-{{ `{{ .name }}` }}"
+          releaseName: "team-{{ .name }}"
           values: |
             platform:
               repoUrl: <PLATFORM_GITOPS_REPO_URL>
             team:
-              name: {{ `{{ .name | quote }}` }}
-              repoUrl: {{ `{{ default "" .repoUrl | quote }}` }}
-              revision: {{ `{{ default "main" .revision | quote }}` }}
-              appPath: {{ `{{ .appPath | quote }}` }}
-              identityClientId: {{ `{{ default "" .identityClientId | quote }}` }}
-              sharedChartRepoUrl: {{ `{{ default "" .sharedChartRepoUrl | quote }}` }}
+              name: {{ .name | quote }}
+              repoUrl: {{ dig "repoUrl" "" . | quote }}
+              revision: {{ dig "revision" "main" . | quote }}
+              appPath: {{ .appPath | quote }}
+              identityClientId: {{ dig "identityClientId" "" . | quote }}
+              sharedChartRepoUrl: {{ dig "sharedChartRepoUrl" "" . | quote }}
               entraGroups:
-                owners:
-                  {{ `{{- range (default (list) .entraGroups.owners) }}` }}
-                  - {{ `{{ . | quote }}` }}
-                  {{ `{{- end }}` }}
-                developers:
-                  {{ `{{- range (default (list) .entraGroups.developers) }}` }}
-                  - {{ `{{ . | quote }}` }}
-                  {{ `{{- end }}` }}
-                viewers:
-                  {{ `{{- range (default (list) .entraGroups.viewers) }}` }}
-                  - {{ `{{ . | quote }}` }}
-                  {{ `{{- end }}` }}
+                {{- toYaml (dig "entraGroups" (dict "owners" list "developers" list "viewers" list) .) | nindent 16 }}
               quota:
-                {{ `{{- toYaml (default (dict) .quota) | nindent 16 }}` }}
+                {{- toYaml (dig "quota" (dict) .) | nindent 16 }}
               limitRange:
-                {{ `{{- toYaml (default (dict) .limitRange) | nindent 16 }}` }}
+                {{- toYaml (dig "limitRange" (dict) .) | nindent 16 }}
               networkPolicy:
-                {{ `{{- toYaml (default (dict) .networkPolicy) | nindent 16 }}` }}
+                {{- toYaml (dig "networkPolicy" (dict) .) | nindent 16 }}
       destination:
         server: https://kubernetes.default.svc
         namespace: argocd
@@ -88,5 +73,3 @@ spec:
         automated:
           prune: true
           selfHeal: true
-        syncOptions:
-          - ServerSideApply=true
