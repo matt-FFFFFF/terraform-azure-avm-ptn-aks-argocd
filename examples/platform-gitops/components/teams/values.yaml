@@ -1,17 +1,89 @@
-# Default values — overridden by the ApplicationSet for each team.
-team:
-  # The team name, used as namespace and AppProject name.
-  name: ""
-  # The Git repo URL for this team's gitops repo.
-  # Azure DevOps: https://dev.azure.com/org/project/_git/team-gitops
-  # GitHub:       https://github.com/org/team-gitops
+# Default values for the team-resources chart.
+# Overridden by the platform ApplicationSet (argocd/teams.yaml), which renders
+# this chart once per file under config/teams/*.yaml.
+#
+# Schema lives in two top-level keys:
+#   - platform: injected once by the platform ApplicationSet, identical for
+#               every team. Holds defaults teams should not have to repeat.
+#   - team:     per-team values read from config/teams/<name>.yaml.
+
+platform:
+  # The monorepo URL. Used as the default repoUrl for teams that keep their
+  # workloads inside this same gitops repo (the recommended pattern).
   repoUrl: ""
-  # The managed identity client ID for this team's workload identity.
-  identityClientId: ""
-  # The target revision (branch) for the team's gitops repo.
+
+team:
+  # The team name. Used as namespace name and AppProject name.
+  name: ""
+
+  # The Git repo URL containing the team's service manifests.
+  # Defaults to the platform monorepo when empty — teams only set this when
+  # they need an external repo (exceptional, requires platform sign-off).
+  repoUrl: ""
+
+  # Branch / revision of the repo above to track.
   revision: main
-  # The base path within the team's gitops repo to scan for services.
-  # Each subdirectory under this path becomes an Argo Application.
-  appPath: services
-  # The shared Helm chart repo URL for team services.
+
+  # Path within repoUrl whose subdirectories become Applications.
+  # Monorepo convention: "teams/<name>/services".
+  appPath: ""
+
+  # Shared Helm chart repo URL teams may source charts from in addition to
+  # their own repo. Whitelisted in the AppProject sourceRepos.
   sharedChartRepoUrl: ""
+
+  # Client ID of the Azure user-assigned managed identity federated with the
+  # team's workload-identity service account. Provisioning of the UAMI itself
+  # is out of scope for this gitops repo (see README).
+  identityClientId: ""
+
+  # Entra ID security group object IDs (GUIDs) granted access to this team's
+  # AppProject. Each list maps to a role on AppProject.spec.roles and is
+  # matched against the "groups" claim in the user's OIDC ID token.
+  #
+  # All three lists are optional. Empty list = nobody from Entra gets that role
+  # (the local admin account still has full access).
+  entraGroups:
+    owners: []      # full control over the team's Applications + AppProject
+    developers: []  # sync / get apps; cannot edit project membership
+    viewers: []     # read-only
+
+  # Hard caps on aggregate resource usage in the team's namespace.
+  # Required: if omitted the ResourceQuota is not rendered, which the platform
+  # disallows in production (CI check enforces presence).
+  quota: {}
+  # Example:
+  # quota:
+  #   requests:
+  #     cpu: "8"
+  #     memory: "16Gi"
+  #   limits:
+  #     cpu: "16"
+  #     memory: "32Gi"
+  #   pods: "50"
+  #   persistentvolumeclaims: "10"
+
+  # Default container requests/limits applied to pods that don't set their own.
+  # Optional but recommended — pairs with the ResourceQuota above.
+  limitRange: {}
+  # Example:
+  # limitRange:
+  #   defaultRequest:
+  #     cpu: "100m"
+  #     memory: "128Mi"
+  #   default:
+  #     cpu: "500m"
+  #     memory: "512Mi"
+  #   max:
+  #     cpu: "2"
+  #     memory: "4Gi"
+
+  # NetworkPolicy controls. The chart always renders a default-deny ingress
+  # policy when this block is present; allowFromNamespaces adds an allow rule
+  # for traffic from the listed namespaces (matched by kubernetes.io/metadata.name).
+  networkPolicy: {}
+  # Example:
+  # networkPolicy:
+  #   allowFromNamespaces:
+  #     - istio-system
+  #     - argocd

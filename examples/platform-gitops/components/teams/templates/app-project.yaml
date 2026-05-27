@@ -1,6 +1,10 @@
-# AppProject scopes the team to their own namespace and repo.
-# Teams can only deploy to their own namespace and can only
-# source from their own Git repo and the shared chart repo.
+# AppProject scopes the team to their own namespace and repo, and binds
+# Entra ID security groups to per-project roles (owner / developer / viewer).
+#
+# The namespaceResourceBlacklist below prevents teams from creating their own
+# ResourceQuota / LimitRange / NetworkPolicy from their services/ directory.
+# Only the platform-owned team-resources chart can render those (see the
+# resource-quota.yaml, limit-range.yaml, network-policy.yaml templates).
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
@@ -11,7 +15,12 @@ metadata:
 spec:
   description: "Project for team {{ .Values.team.name }}"
   sourceRepos:
-    - {{ .Values.team.repoUrl | quote }}
+    - {{ (.Values.team.repoUrl | default .Values.platform.repoUrl) | quote }}
+    {{- if and .Values.team.repoUrl (ne .Values.team.repoUrl .Values.platform.repoUrl) }}
+    # Team repo differs from the platform monorepo — whitelist the platform
+    # repo too so platform-rendered resources for this team stay valid.
+    - {{ .Values.platform.repoUrl | quote }}
+    {{- end }}
     {{- if .Values.team.sharedChartRepoUrl }}
     - {{ .Values.team.sharedChartRepoUrl | quote }}
     {{- end }}
@@ -26,3 +35,35 @@ spec:
       kind: LimitRange
     - group: networking.k8s.io
       kind: NetworkPolicy
+  roles:
+    - name: owner
+      description: "Full control over team {{ .Values.team.name }} Applications and AppProject."
+      policies:
+        - p, proj:{{ .Values.team.name }}:owner, applications, *, {{ .Values.team.name }}/*, allow
+        - p, proj:{{ .Values.team.name }}:owner, repositories, *, *, allow
+        - p, proj:{{ .Values.team.name }}:owner, logs, get, {{ .Values.team.name }}/*, allow
+        - p, proj:{{ .Values.team.name }}:owner, exec, create, {{ .Values.team.name }}/*, allow
+      groups:
+        {{- range .Values.team.entraGroups.owners }}
+        - {{ . | quote }}
+        {{- end }}
+    - name: developer
+      description: "Sync, get and view logs on team {{ .Values.team.name }} Applications."
+      policies:
+        - p, proj:{{ .Values.team.name }}:developer, applications, get,    {{ .Values.team.name }}/*, allow
+        - p, proj:{{ .Values.team.name }}:developer, applications, sync,   {{ .Values.team.name }}/*, allow
+        - p, proj:{{ .Values.team.name }}:developer, applications, action/*, {{ .Values.team.name }}/*, allow
+        - p, proj:{{ .Values.team.name }}:developer, logs, get, {{ .Values.team.name }}/*, allow
+      groups:
+        {{- range .Values.team.entraGroups.developers }}
+        - {{ . | quote }}
+        {{- end }}
+    - name: viewer
+      description: "Read-only access to team {{ .Values.team.name }} Applications."
+      policies:
+        - p, proj:{{ .Values.team.name }}:viewer, applications, get, {{ .Values.team.name }}/*, allow
+        - p, proj:{{ .Values.team.name }}:viewer, logs, get, {{ .Values.team.name }}/*, allow
+      groups:
+        {{- range .Values.team.entraGroups.viewers }}
+        - {{ . | quote }}
+        {{- end }}

@@ -1,16 +1,28 @@
 # Sync Wave 4: Team Onboarding
+#
 # This ApplicationSet discovers team config files under config/teams/*.yaml
 # using the git file generator. Each file produces one Application that
-# deploys the team-resources Helm chart (components/teams/), creating:
-#   - Namespace (with Istio sidecar injection)
-#   - AppProject (scoped to team's namespace and repo)
-#   - ApplicationSet (watches team's gitops repo for services)
+# renders the team-resources Helm chart (components/teams/), creating:
+#
+#   - Namespace            (with Istio sidecar injection)
+#   - AppProject           (scoped + Entra group RBAC bindings)
+#   - ResourceQuota        (per-team caps)
+#   - LimitRange           (default container requests/limits)
+#   - NetworkPolicy        (default-deny ingress)
+#   - ServiceAccount       (workload identity, if identityClientId is set)
+#   - ApplicationSet       (watches the team's repo/path for services)
 #
 # To onboard a new team:
-# 1. Create a new YAML file under config/teams/ (e.g. config/teams/team-c.yaml)
-# 2. Create the team's gitops repo in Azure DevOps
-# 3. Create a managed identity for the team in Terraform (WS1)
-# 4. Commit and push — Argo CD handles the rest
+#   1. Create config/teams/<name>.yaml (see config/teams/team-a.yaml for the schema).
+#   2. (Monorepo) Create teams/<name>/services/ in this repo and add CODEOWNERS.
+#      (External repo) Create the team's gitops repo and set repoUrl in the config.
+#   3. Provision the team's UAMI + federated credential out-of-band, capture
+#      the clientId, and put it in the config file (optional).
+#   4. Open a PR. After merge, Argo CD handles the rest.
+#
+# Implementation note: complex values (lists, maps) are passed via helm.values
+# (a templated YAML string) rather than helm.valuesObject so that the git file
+# generator's per-key fields can be re-serialized to YAML using `toYaml`.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -39,15 +51,36 @@ spec:
         path: components/teams
         targetRevision: main
         helm:
-          valuesObject:
+          releaseName: "team-{{ `{{ .name }}` }}"
+          values: |
+            platform:
+              repoUrl: <PLATFORM_GITOPS_REPO_URL>
             team:
-              name: "{{ `{{ .name }}` }}"
-              repoUrl: "{{ `{{ .repoUrl }}` }}"
-              identityClientId: "{{ `{{ .identityClientId }}` }}"
-              revision: "{{ `{{ .revision }}` }}"
-              appPath: "{{ `{{ .appPath }}` }}"
-
-              sharedChartRepoUrl: "{{ `{{ .sharedChartRepoUrl }}` }}"
+              name: {{ `{{ .name | quote }}` }}
+              repoUrl: {{ `{{ default "" .repoUrl | quote }}` }}
+              revision: {{ `{{ default "main" .revision | quote }}` }}
+              appPath: {{ `{{ .appPath | quote }}` }}
+              identityClientId: {{ `{{ default "" .identityClientId | quote }}` }}
+              sharedChartRepoUrl: {{ `{{ default "" .sharedChartRepoUrl | quote }}` }}
+              entraGroups:
+                owners:
+                  {{ `{{- range (default (list) .entraGroups.owners) }}` }}
+                  - {{ `{{ . | quote }}` }}
+                  {{ `{{- end }}` }}
+                developers:
+                  {{ `{{- range (default (list) .entraGroups.developers) }}` }}
+                  - {{ `{{ . | quote }}` }}
+                  {{ `{{- end }}` }}
+                viewers:
+                  {{ `{{- range (default (list) .entraGroups.viewers) }}` }}
+                  - {{ `{{ . | quote }}` }}
+                  {{ `{{- end }}` }}
+              quota:
+                {{ `{{- toYaml (default (dict) .quota) | nindent 16 }}` }}
+              limitRange:
+                {{ `{{- toYaml (default (dict) .limitRange) | nindent 16 }}` }}
+              networkPolicy:
+                {{ `{{- toYaml (default (dict) .networkPolicy) | nindent 16 }}` }}
       destination:
         server: https://kubernetes.default.svc
         namespace: argocd

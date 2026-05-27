@@ -1,0 +1,55 @@
+# Hard caps on aggregate resource usage in the team's namespace.
+# Rendered from .Values.team.quota in config/teams/<name>.yaml.
+#
+# This object is blacklisted from team-managed sources by the AppProject
+# (namespaceResourceBlacklist), so teams cannot raise their own quota.
+{{- if .Values.team.quota }}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ .Values.team.name }}-quota
+  namespace: {{ .Values.team.name }}
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: platform
+    platform.example.com/team: {{ .Values.team.name }}
+spec:
+  hard:
+    {{- with .Values.team.quota.requests }}
+    {{- if .cpu }}
+    requests.cpu: {{ .cpu | quote }}
+    {{- end }}
+    {{- if .memory }}
+    requests.memory: {{ .memory | quote }}
+    {{- end }}
+    {{- if .storage }}
+    requests.storage: {{ .storage | quote }}
+    {{- end }}
+    {{- end }}
+    {{- with .Values.team.quota.limits }}
+    {{- if .cpu }}
+    limits.cpu: {{ .cpu | quote }}
+    {{- end }}
+    {{- if .memory }}
+    limits.memory: {{ .memory | quote }}
+    {{- end }}
+    {{- end }}
+    {{- if .Values.team.quota.pods }}
+    pods: {{ .Values.team.quota.pods | quote }}
+    {{- end }}
+    {{- if .Values.team.quota.persistentvolumeclaims }}
+    persistentvolumeclaims: {{ .Values.team.quota.persistentvolumeclaims | quote }}
+    {{- end }}
+    {{- if .Values.team.quota.services }}
+    services: {{ .Values.team.quota.services | quote }}
+    {{- end }}
+    {{- if .Values.team.quota.servicesLoadBalancers }}
+    services.loadbalancers: {{ .Values.team.quota.servicesLoadBalancers | quote }}
+    {{- end }}
+    {{- if .Values.team.quota.secrets }}
+    secrets: {{ .Values.team.quota.secrets | quote }}
+    {{- end }}
+    {{- if .Values.team.quota.configmaps }}
+    configmaps: {{ .Values.team.quota.configmaps | quote }}
+    {{- end }}
+{{- end }}

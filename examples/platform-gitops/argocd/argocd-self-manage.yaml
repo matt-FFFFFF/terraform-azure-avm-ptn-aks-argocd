@@ -1,21 +1,29 @@
 # Sync Wave 3: Argo CD Self-Management
-# This Application causes Argo CD to manage its own Helm release.
-# After the initial Terraform bootstrap, this Application "adopts"
-# the existing Argo CD installation so that all further configuration
-# changes are made via Git rather than Terraform.
 #
-# The Helm values here should match (and eventually supersede) what
-# Terraform deployed during bootstrap. The Terraform module has
-# lifecycle { ignore_changes } on the Helm release values so that
-# this Application can take over.
+# Causes Argo CD to manage its own Helm release. After the initial Terraform
+# bootstrap, this Application "adopts" the existing Argo CD installation so
+# that all further configuration changes are made via Git. The Terraform
+# module has lifecycle { ignore_changes } on the Helm release values so this
+# Application can take over.
 #
-# IMPORTANT: The values below must include the workload identity
-# configuration (service account annotations, pod labels, GIT_ASKPASS
-# volume mounts) to preserve Git authentication after Argo adopts
-# the release. When using GitHub App auth (git_provider = "github"),
-# the repoServer workload identity and GIT_ASKPASS sections below
-# should be removed — ArgoCD handles GitHub App auth natively via
-# the repo-creds secret.
+# This file also configures:
+#   - Entra ID (Azure AD) OIDC SSO. The clientID and tenant ID are baked in
+#     below; the clientSecret is sourced from argocd-secret (key
+#     "oidc.entra.clientSecret"), which is populated by the ExternalSecret
+#     in components/argocd-oidc-secret/external-secret.yaml.
+#   - Platform-admin RBAC. Members of the platform admins Entra group get
+#     role:admin. All other authenticated users default to role:readonly;
+#     per-team access is granted via AppProject.spec.roles (see the
+#     team-resources chart).
+#
+# IMPORTANT: keep the workload-identity wiring on the repoServer here. When
+# using GitHub App auth instead (git_provider = "github" in Terraform),
+# remove the repoServer serviceAccount / podLabels / GIT_ASKPASS blocks —
+# ArgoCD handles GitHub App auth natively via the repo-creds secret.
+#
+# See README.md → "Prerequisite: Configure Entra ID App Registration" for
+# how to populate the <ENTRA_TENANT_ID>, <ARGOCD_ENTRA_APP_CLIENT_ID>, and
+# <PLATFORM_ADMIN_GROUP_OBJECT_ID> placeholders below.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -56,6 +64,37 @@ spec:
           params:
             server.insecure: true
           cm:
+            # Public URL of the Argo CD UI. Must match the redirect URI
+            # registered on the Entra app registration.
+            url: https://argocd.<PLATFORM_DOMAIN>
+            # Disable the built-in local "admin" account. With Entra OIDC
+            # configured below, SSO becomes the only login path — there is
+            # no password form on the UI and `argocd login --username admin`
+            # is rejected.
+            #
+            # Break-glass: to re-enable temporarily, set this to "true",
+            # commit, let argocd-self-manage sync, then reset the password:
+            #   argocd admin initial-password -n argocd   # show generated pw
+            # or replace the bcrypt hash in argocd-secret directly. Disable
+            # again once recovery is complete.
+            admin.enabled: "false"
+            # Also forbid unauthenticated browsing of the API/UI.
+            users.anonymous.enabled: "false"
+            # Entra ID OIDC. The clientSecret is sourced from argocd-secret
+            # at the key "oidc.entra.clientSecret" — populated by ESO from
+            # the Key Vault secret named in argocd-oidc-secret.yaml.
+            oidc.config: |
+              name: Entra
+              issuer: https://login.microsoftonline.com/<ENTRA_TENANT_ID>/v2.0
+              clientID: <ARGOCD_ENTRA_APP_CLIENT_ID>
+              clientSecret: $oidc.entra.clientSecret
+              requestedScopes:
+                - openid
+                - profile
+                - email
+              requestedIDTokenClaims:
+                groups:
+                  essential: true
             resource.exclusions: |
               - apiGroups:
                   - cilium.io
@@ -63,6 +102,15 @@ spec:
                   - CiliumIdentity
                 clusters:
                   - "*"
+          rbac:
+            # Default everyone to read-only; explicit grants below + per-team
+            # AppProject.spec.roles handle real access.
+            policy.default: role:readonly
+            # Tell ArgoCD which claim carries the Entra group object IDs.
+            scopes: "[groups]"
+            policy.csv: |
+              # Platform admins (full control).
+              g, <PLATFORM_ADMIN_GROUP_OBJECT_ID>, role:admin
         server:
           service:
             type: ClusterIP

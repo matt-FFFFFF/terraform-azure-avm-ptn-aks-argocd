@@ -1,12 +1,69 @@
 # Team A configuration.
-# Each file under config/teams/ is discovered by the teams ApplicationSet
-# (argocd/teams.yaml) via the git file generator. Adding a new file here
-# automatically onboards a new team.
+#
+# Each file under config/teams/ is discovered by the platform "teams"
+# ApplicationSet (argocd/teams.yaml) and renders the team-resources Helm chart
+# once per team. Adding a new file here onboards a new team.
+#
+# Schema reference: components/teams/values.yaml
+# Onboarding guide: ../../README.md
+
+# Team name. Also used as the namespace and AppProject name.
 name: team-a
-repoUrl: https://dev.azure.com/org/project/_git/team-a-gitops
-# GitHub alternative: https://github.com/org/team-a-gitops
-identityClientId: <TEAM_A_IDENTITY_CLIENT_ID>
+
+# Monorepo convention: leave repoUrl empty, point appPath at this repo.
+# Set repoUrl explicitly only if the team has its own gitops repo (requires
+# platform sign-off — breaks CODEOWNERS-based review).
+repoUrl: ""
 revision: main
-appPath: services
+appPath: teams/team-a/services
+
+# Optional shared chart repo. Whitelisted in the AppProject sourceRepos.
 sharedChartRepoUrl: https://dev.azure.com/org/project/_git/helm-charts
-# GitHub alternative: https://github.com/org/helm-charts
+
+# Client ID of the team's Azure user-assigned managed identity (federated
+# with the workload-identity service account in this namespace). Leave empty
+# if the team doesn't need workload identity yet.
+identityClientId: <TEAM_A_IDENTITY_CLIENT_ID>
+
+# Entra ID security group object IDs (GUIDs) granted access to this team's
+# AppProject. See README.md → "Entra group conventions" for naming and how
+# to look up object IDs (`az ad group show --group <name> --query id -o tsv`).
+entraGroups:
+  owners:
+    - <TEAM_A_OWNERS_GROUP_OBJECT_ID>
+  developers:
+    - <TEAM_A_DEVELOPERS_GROUP_OBJECT_ID>
+  viewers: []
+
+# Hard caps on namespace-wide resource usage.
+quota:
+  requests:
+    cpu: "8"
+    memory: "16Gi"
+  limits:
+    cpu: "16"
+    memory: "32Gi"
+  pods: "50"
+  persistentvolumeclaims: "10"
+  services: "20"
+  servicesLoadBalancers: "0"
+  secrets: "100"
+  configmaps: "100"
+
+# Default container requests/limits for pods that don't set their own.
+limitRange:
+  defaultRequest:
+    cpu: "100m"
+    memory: "128Mi"
+  default:
+    cpu: "500m"
+    memory: "512Mi"
+  max:
+    cpu: "2"
+    memory: "4Gi"
+
+# Default-deny ingress; allow only traffic from these namespaces.
+networkPolicy:
+  allowFromNamespaces:
+    - istio-system
+    - argocd

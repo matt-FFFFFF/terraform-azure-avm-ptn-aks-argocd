@@ -1,0 +1,11 @@
+# Mesh-wide strict mTLS policy.
+# Requires all traffic between meshed services to use mutual TLS.
+# Applied in aks-istio-system to take effect across all namespaces.
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: aks-istio-system
+spec:
+  mtls:
+    mode: STRICT

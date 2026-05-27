@@ -1,0 +1,33 @@
+# Default container-level requests/limits applied to pods that omit them.
+# Paired with the namespace ResourceQuota so unbounded pods can't exhaust
+# the team's allowance.
+{{- if .Values.team.limitRange }}
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: {{ .Values.team.name }}-limits
+  namespace: {{ .Values.team.name }}
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: platform
+    platform.example.com/team: {{ .Values.team.name }}
+spec:
+  limits:
+    - type: Container
+      {{- with .Values.team.limitRange.defaultRequest }}
+      defaultRequest:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.team.limitRange.default }}
+      default:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.team.limitRange.max }}
+      max:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.team.limitRange.min }}
+      min:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

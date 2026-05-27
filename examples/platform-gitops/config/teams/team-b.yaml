@@ -1,9 +1,46 @@
-# Team B configuration.
+# Team B configuration. See team-a.yaml for the full schema with comments,
+# and ../../README.md for the onboarding workflow.
 name: team-b
-repoUrl: https://dev.azure.com/org/project/_git/team-b-gitops
-# GitHub alternative: https://github.com/org/team-b-gitops
-identityClientId: <TEAM_B_IDENTITY_CLIENT_ID>
+
+repoUrl: ""
 revision: main
-appPath: services
+appPath: teams/team-b/services
+
 sharedChartRepoUrl: https://dev.azure.com/org/project/_git/helm-charts
-# GitHub alternative: https://github.com/org/helm-charts
+
+identityClientId: <TEAM_B_IDENTITY_CLIENT_ID>
+
+entraGroups:
+  owners:
+    - <TEAM_B_OWNERS_GROUP_OBJECT_ID>
+  developers:
+    - <TEAM_B_DEVELOPERS_GROUP_OBJECT_ID>
+  viewers:
+    - <TEAM_B_VIEWERS_GROUP_OBJECT_ID>
+
+quota:
+  requests:
+    cpu: "4"
+    memory: "8Gi"
+  limits:
+    cpu: "8"
+    memory: "16Gi"
+  pods: "30"
+  persistentvolumeclaims: "5"
+  services: "10"
+  servicesLoadBalancers: "0"
+  secrets: "50"
+  configmaps: "50"
+
+limitRange:
+  defaultRequest:
+    cpu: "100m"
+    memory: "128Mi"
+  default:
+    cpu: "250m"
+    memory: "256Mi"
+
+networkPolicy:
+  allowFromNamespaces:
+    - istio-system
+    - argocd

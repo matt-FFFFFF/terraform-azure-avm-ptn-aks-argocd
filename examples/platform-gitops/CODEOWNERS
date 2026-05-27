@@ -1,0 +1,19 @@
+# CODEOWNERS for the platform-gitops monorepo.
+#
+# Platform team owns everything by default. Per-team subdirectories under
+# /teams/<name>/ are owned by that team — they can self-merge changes to
+# their own service manifests without platform review.
+#
+# Onboarding a new team adds two lines: a /teams/<name>/ ownership line here
+# and the config file under /config/teams/. The config file itself stays
+# under platform review (it grants Entra group access and sets quotas).
+
+* @org/platform-team
+
+# Per-team workload manifests — owned by the team.
+/teams/team-a/   @org/team-a
+/teams/team-b/   @org/team-b
+
+# Team config files (quotas, group bindings, identity client IDs) stay under
+# platform review even though they reference team resources.
+/config/teams/   @org/platform-team

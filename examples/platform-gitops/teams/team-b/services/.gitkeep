@@ -1,0 +1,3 @@
+# Placeholder so the directory exists in git and the ApplicationSet's git
+# directory generator can scan teams/team-b/services/*. Delete once the team
+# adds its first service subdirectory.
